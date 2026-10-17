@@ -399,6 +399,7 @@ function Conversation({
           isUnseen={isUnseen}
           isGenerating={isGenerating}
           title={title}
+          updatedAt={conversation.updatedAt}
           onRename={handleRename}
           isSmallScreen={isSmallScreen}
           localize={localize}
