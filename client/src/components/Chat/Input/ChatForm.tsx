@@ -73,6 +73,7 @@ import CodeWorkspaceMenu from './CodeWorkspaceMenu';
 import useSteering from '~/hooks/Chat/useSteering';
 import CodeApprovalMenu from './CodeApprovalMenu';
 import TextareaHeader from './TextareaHeader';
+import MineSelectedModelsBar from './MineSelectedModelsBar';
 import PromptsCommand from './PromptsCommand';
 import { submitFromComposer } from './submit';
 import SkillsCommand from './SkillsCommand';
@@ -838,6 +839,13 @@ const ChatForm = memo(function ChatForm({
                   'border-series-6/50 from-series-6/10 to-series-6/10 high-contrast:border-series-6 bg-linear-to-b',
               )}
             >
+              {index === 0 && (
+                <MineSelectedModelsBar
+                  conversation={conversation}
+                  addedConvo={addedConvo}
+                  setAddedConvo={setAddedConvo}
+                />
+              )}
               <TextareaHeader addedConvo={addedConvo} setAddedConvo={setAddedConvo} />
               <Tray
                 items={composerItems}
