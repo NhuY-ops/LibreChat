@@ -12,6 +12,8 @@ interface ConvoLinkProps {
   /** The avatar's ring is decorative, so the label carries the running state. */
   isGenerating?: boolean;
   title: string | null;
+  /** ISO timestamp used for a lightweight native date/time tooltip. */
+  updatedAt?: string | null;
   onRename: () => void;
   isSmallScreen: boolean;
   localize: (key: TranslationKeys, options?: TOptions) => string;
@@ -46,6 +48,7 @@ const ConvoLink: React.FC<ConvoLinkProps> = ({
   isUnseen,
   isGenerating = false,
   title,
+  updatedAt,
   onRename,
   isSmallScreen,
   localize,
@@ -57,6 +60,9 @@ const ConvoLink: React.FC<ConvoLinkProps> = ({
   const titleRef = useRef<HTMLSpanElement>(null);
   const textRef = useRef<HTMLSpanElement>(null);
   const displayTitle = title || localize('com_ui_untitled');
+  const timestamp = updatedAt && Number.isFinite(Date.parse(updatedAt))
+    ? new Date(updatedAt).toLocaleString()
+    : undefined;
 
   useEffect(() => {
     const viewport = titleRef.current;
@@ -133,6 +139,7 @@ const ConvoLink: React.FC<ConvoLinkProps> = ({
   return (
     <button
       type="button"
+      title={timestamp ? `Updated: ${timestamp}` : undefined}
       className={cn(
         'focus-visible:ring-text-primary flex w-full min-w-0 grow cursor-pointer items-center gap-2 self-stretch overflow-hidden rounded-lg px-2 text-left outline-hidden focus-visible:ring-2 focus-visible:ring-inset',
         isActiveConvo || isPopoverActive ? 'bg-surface-nav-selected' : '',
