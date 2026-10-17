@@ -33,22 +33,28 @@ because replacing that file could remove custom endpoints/settings: merge the
 control in the selector. OpenRouter model access, billing, and quotas follow the
 user's OpenRouter account.
 
-## Compare (currently 2 models)
+## Model selection tray (up to 8 choices)
 
-1. Choose a primary provider/model from **Select a model**.
-2. Open the dropdown and click **Compare +**.
-3. Choose a *different* model, including a model from OpenRouter.
-4. The second model appears next to the primary model in the header.
-5. Send a prompt through LibreChat's composer; LibreChat's built-in second
-   response state handles parallel replies. Use **X** to remove the comparison.
-6. Use **Done** to leave comparison selection mode and return to normal
-   single-model selection.
+1. Pick the primary model as usual.
+2. Open **Select a model** → **Select multiple +** and pick more provider/model entries.
+3. The selection tray appears immediately above the message textarea, with a
+   removable chip for each additional model. The first chip is the main model.
+4. Click **Add models** in that tray to reopen the selector.
+5. Click **Done** to stop adding. The selector remembers choices during this session.
 
-**Important limitation:** LibreChat's current `multiConvo` front end has
-only two response panes. This implementation intentionally limits comparison
-to two live models. Supporting 3+ parallel requests requires a separate
-refactor of composer, response panes, submission state and history. Merely
-adding additional checkboxes would falsely promise working comparisons.
+**Execution status is explicit:**
+
+- **Main** and **Live** are the existing two response streams supported by LibreChat.
+- **Saved** means a model is selected in the UI but **not included in the current send**.
+- Removing the live comparison promotes the oldest saved selection into that slot.
+- Current maximum: **8 models selected**, **2 executed per prompt**.
+- Never claim 3–8 models are already responding simultaneously. A multi-run
+  engine, independent conversation histories, persistence, quotas and per-run
+  cancellation are required to execute them all; that backend is not yet built.
+
+The model chips deliberately don't contain any API credentials. An OpenRouter
+key can fund requests to different providers, but each actual model call can incur
+independent fees.
 
 ## Smoke test checklist
 
