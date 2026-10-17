@@ -154,8 +154,6 @@ interface ChatsHeaderProps {
 /** Collapsible header for the Chats section */
 const ChatsHeader: FC<ChatsHeaderProps> = memo(
   ({ isExpanded, onToggle, trailing, highlight, viewMode, onToggleViewMode }) => {
-  const localize = useLocalize();
-
   return (
     <div
       className={cn(
