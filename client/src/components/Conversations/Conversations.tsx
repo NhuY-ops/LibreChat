@@ -7,6 +7,8 @@ import { List, CellMeasurer, CellMeasurerCache } from 'react-virtualized';
 import { Button, EmptyState, Spinner, useRemScale, buttonVariants } from '@librechat/client';
 import {
   Archive,
+  Activity,
+  CalendarDays,
   ChevronDown,
   MessageSquareDashed,
   MessageSquareOff,
@@ -39,7 +41,13 @@ import {
   FINISHED_CHATS_GROUP,
   groupConversationsByStatus,
 } from './running';
-import { useLocalize, TranslationKeys, useElementSize, useOuterScrollWindow } from '~/hooks';
+import {
+  useLocalize,
+  useLocalStorage,
+  TranslationKeys,
+  useElementSize,
+  useOuterScrollWindow,
+} from '~/hooks';
 import { useActiveJobs, useRunningConversationsQuery } from '~/data-provider';
 import { facetFilterCountAtom, resetFacetsAtom } from './facets';
 import useDrawerViewport from '~/hooks/Nav/useDrawerViewport';
@@ -137,12 +145,15 @@ interface ChatsHeaderProps {
   onToggle: () => void;
   /** Section-scoped actions, mirroring the Projects header. */
   trailing?: ReactNode;
+  viewMode: 'recent' | 'activity';
+  onToggleViewMode: () => void;
   /** Drop-target affordance while a project conversation is dragged over the section. */
   highlight?: boolean;
 }
 
 /** Collapsible header for the Chats section */
-const ChatsHeader: FC<ChatsHeaderProps> = memo(({ isExpanded, onToggle, trailing, highlight }) => {
+const ChatsHeader: FC<ChatsHeaderProps> = memo(
+  ({ isExpanded, onToggle, trailing, highlight, viewMode, onToggleViewMode }) => {
   const localize = useLocalize();
 
   return (
@@ -158,7 +169,7 @@ const ChatsHeader: FC<ChatsHeaderProps> = memo(({ isExpanded, onToggle, trailing
         type="button"
         aria-expanded={isExpanded}
       >
-        <span className="truncate select-none">{localize('com_ui_chats')}</span>
+        <span className="truncate select-none">Recent</span>
         <ChevronDown
           className={cn(
             'h-3 w-3 shrink-0 transition-transform duration-200',
@@ -166,6 +177,29 @@ const ChatsHeader: FC<ChatsHeaderProps> = memo(({ isExpanded, onToggle, trailing
           )}
           aria-hidden="true"
         />
+      </button>
+      <button
+        type="button"
+        data-testid="mine-recent-view-mode"
+        onClick={onToggleViewMode}
+        className="text-text-secondary hover:text-text-primary hover:bg-surface-nav-hover flex h-7 items-center gap-1 rounded-md px-1.5 text-xs"
+        title={
+          viewMode === 'recent'
+            ? 'Group by activity: Running and Finished'
+            : 'Group by date: Today, Yesterday, Previous 7 Days'
+        }
+        aria-label={
+          viewMode === 'recent' ? 'Switch to activity grouping' : 'Switch to date grouping'
+        }
+      >
+        {viewMode === 'recent' ? (
+          <CalendarDays className="size-3.5" aria-hidden="true" />
+        ) : (
+          <Activity className="size-3.5" aria-hidden="true" />
+        )}
+        <span className="hidden min-[380px]:inline">
+          {viewMode === 'recent' ? 'Date' : 'Activity'}
+        </span>
       </button>
       {trailing}
     </div>
@@ -241,6 +275,12 @@ const Conversations: FC<ConversationsProps> = ({
   accountHasProjects = false,
 }) => {
   const localize = useLocalize();
+  const [storedViewMode, setStoredViewMode] = useLocalStorage('mine:recentGroupBy', 'recent');
+  const viewMode: 'recent' | 'activity' = storedViewMode === 'activity' ? 'activity' : 'recent';
+  const onToggleViewMode = useCallback(
+    () => setStoredViewMode(viewMode === 'recent' ? 'activity' : 'recent'),
+    [setStoredViewMode, viewMode],
+  );
   const search = useRecoilValue(store.search);
   const sort = useAtomValue(chatSortAtom);
   const isArchivedView = useAtomValue(isArchivedChatViewAtom);
@@ -356,27 +396,30 @@ const Conversations: FC<ConversationsProps> = ({
   const listsNewestFirst = sort.field === 'updatedAt' && sort.direction === 'desc';
   const runningIdsToFetch = useMemo(
     () =>
-      isUnnarrowed && isChatsExpanded && listsNewestFirst
+      viewMode === 'activity' && isUnnarrowed && isChatsExpanded && listsNewestFirst
         ? unlistedRunningIds(datedConversations, activeJobIds)
         : [],
-    [isUnnarrowed, isChatsExpanded, listsNewestFirst, datedConversations, activeJobIds],
+    [viewMode, isUnnarrowed, isChatsExpanded, listsNewestFirst, datedConversations, activeJobIds],
   );
   const unlistedRunning = useRunningConversationsQuery(runningIdsToFetch);
   /** The archive keeps its server order, while search still promotes active matches. */
   const groupedConversations = useMemo(
     () =>
-      groupConversationsByStatus(
-        datedConversations,
-        activeJobIds,
-        {
-          field: sort.field,
-          direction: sort.direction,
-          includePinned: isArchivedView,
-        },
-        isUnnarrowed ? unlistedRunning : undefined,
-      ),
+      viewMode === 'recent'
+        ? datedConversations
+        : groupConversationsByStatus(
+            datedConversations,
+            activeJobIds,
+            {
+              field: sort.field,
+              direction: sort.direction,
+              includePinned: isArchivedView,
+            },
+            isUnnarrowed ? unlistedRunning : undefined,
+          ),
     [
       datedConversations,
+      viewMode,
       activeJobIds,
       isArchivedView,
       isUnnarrowed,
@@ -718,6 +761,8 @@ const Conversations: FC<ConversationsProps> = ({
         <ChatsHeader
           isExpanded={isChatsExpanded}
           onToggle={() => setIsChatsExpanded(!isChatsExpanded)}
+          viewMode={viewMode}
+          onToggleViewMode={onToggleViewMode}
           trailing={chatsHeaderTrailing}
           highlight={isDropOver && canDrop}
         />
