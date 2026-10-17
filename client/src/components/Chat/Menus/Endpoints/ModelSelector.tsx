@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { ChevronDown, GitCompareArrows, X } from 'lucide-react';
+import { MAX_MINE_SELECTED_MODELS } from './mineSelection';
 import { TooltipAnchor } from '@librechat/client';
 import { EModelEndpoint, getConfigDefaults } from 'librechat-data-provider';
 import type { ModelSelectorProps } from '~/common';
@@ -44,6 +45,8 @@ function ModelSelectorContent() {
     compareMode,
     compareAllowed,
     comparison,
+    extraModels,
+    toggleComparedModel,
     setCompareMode,
     clearComparison,
   } = useModelSelectorContext();
@@ -125,7 +128,9 @@ function ModelSelectorContent() {
           <div className="min-w-0">
             <div className="text-text-primary text-xs font-semibold">MINE Model Selector</div>
             <div className="text-text-secondary text-xs">
-              {compareMode ? 'Choose a second model (2 max)' : 'Choose your main model'}
+              {compareMode
+                ? `Select models (${1 + Number(Boolean(comparison?.model)) + extraModels.length}/${MAX_MINE_SELECTED_MODELS})`
+                : 'Choose your main model'}
             </div>
           </div>
           {compareAllowed && (
@@ -136,23 +141,50 @@ function ModelSelectorContent() {
               className="border-border-light hover:bg-surface-hover text-text-primary flex shrink-0 items-center gap-1 rounded-lg border px-2 py-1.5 text-xs"
             >
               <GitCompareArrows className="size-3.5" aria-hidden="true" />
-              {compareMode ? 'Done' : 'Compare +'}
+              {compareMode ? 'Done' : 'Select multiple +'}
             </button>
           )}
         </div>
-        {comparison?.model && (
-          <div className="border-border-light text-text-secondary flex items-center justify-between gap-2 border-b px-3 py-2 text-xs">
-            <span className="truncate">
-              Comparing with {comparison.model}
+        {compareMode && (comparison?.model || extraModels.length > 0) && (
+          <div className="border-border-light flex flex-col gap-1 border-b px-3 py-2">
+            <span className="text-text-secondary text-xs font-medium">
+              Selected models (shown above the chat input)
             </span>
-            <button
-              type="button"
-              className="hover:bg-surface-hover rounded p-1"
-              aria-label="Remove comparison model"
-              onClick={clearComparison}
-            >
-              <X className="size-3.5" aria-hidden="true" />
-            </button>
+            {comparison?.model && (
+              <div className="text-text-primary flex items-center justify-between gap-2 text-xs">
+                <span className="truncate">{comparison.endpoint} · {comparison.model} (live)</span>
+                <button
+                  type="button"
+                  className="hover:bg-surface-hover rounded p-1"
+                  aria-label="Remove live comparison model"
+                  onClick={clearComparison}
+                >
+                  <X className="size-3.5" aria-hidden="true" />
+                </button>
+              </div>
+            )}
+            {extraModels.map((item) => (
+              <div key={item.endpoint + ':' + item.model} className="text-text-primary flex items-center justify-between gap-2 text-xs">
+                <span className="truncate">{item.endpoint} · {item.model} (saved)</span>
+                <button
+                  type="button"
+                  className="hover:bg-surface-hover rounded p-1"
+                  aria-label={'Remove ' + item.model}
+                  onClick={() => {
+                    const match = mappedEndpoints.find((ep) => ep.value === item.endpoint);
+                    if (match) toggleComparedModel(match, item.model);
+                  }}
+                >
+                  <X className="size-3.5" aria-hidden="true" />
+                </button>
+              </div>
+            ))}
+            {extraModels.length > 0 && (
+              <span className="text-text-secondary text-xs">
+                Only the first two selections send messages currently. Others are saved until
+                the multi-run engine is implemented.
+              </span>
+            )}
           </div>
         )}
         {searchResults ? (
@@ -180,20 +212,6 @@ function ModelSelectorContent() {
           </>
         )}
       </Menu>
-      {comparison?.model && (
-        <div className="border-border-chrome bg-presentation text-text-primary flex h-9 min-w-0 max-w-36 items-center gap-1 rounded-theme-control border px-2 text-xs">
-          <GitCompareArrows className="size-3.5 shrink-0" aria-hidden="true" />
-          <span className="truncate" title={comparison.model}>{comparison.model}</span>
-          <button
-            type="button"
-            className="hover:bg-surface-hover shrink-0 rounded p-0.5"
-            aria-label="Remove comparison model"
-            onClick={clearComparison}
-          >
-            <X className="size-3.5" aria-hidden="true" />
-          </button>
-        </div>
-      )}
       <DialogManager
         keyDialogOpen={keyDialogOpen}
         onOpenChange={onOpenChange}
