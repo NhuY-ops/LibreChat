@@ -38,14 +38,22 @@ function EndpointModelItemComponent({
   setSize,
 }: EndpointModelItemProps) {
   const localize = useLocalize();
-  const { handleSelectModel, selectedValues } = useModelSelectorContext();
+  const {
+    handleSelectModel,
+    selectedValues,
+    compareMode,
+    isComparedModel,
+    toggleComparedModel,
+  } = useModelSelectorContext();
   const {
     endpoint: selectedEndpoint,
     model: selectedModel,
     modelSpec: selectedSpec,
   } = selectedValues;
-  const isSelected =
+  const isPrimary =
     !selectedSpec && selectedEndpoint === endpoint.value && selectedModel === modelId;
+  const isCompared = modelId != null && isComparedModel(endpoint.value, modelId);
+  const isSelected = compareMode ? isCompared : isPrimary;
 
   const { ref: itemRef, isActive } = useActiveItem<HTMLDivElement>();
 
@@ -102,7 +110,12 @@ function EndpointModelItemComponent({
   return (
     <MenuItem
       ref={itemRef}
-      onClick={() => handleSelectModel(endpoint, modelId ?? '')}
+      onClick={() =>
+        compareMode
+          ? toggleComparedModel(endpoint, modelId ?? '')
+          : handleSelectModel(endpoint, modelId ?? '')
+      }
+      keepOpenOnSelection={compareMode}
       aria-selected={isSelected || undefined}
       aria-posinset={posInSet}
       aria-setsize={setSize}
@@ -112,6 +125,9 @@ function EndpointModelItemComponent({
         {renderAvatar()}
         <span className="truncate">{modelName}</span>
         {isGlobal && <EarthIcon className="text-surface-submit ml-1 size-4" />}
+        {compareMode && isPrimary && (
+          <span className="text-text-secondary ml-auto shrink-0 text-xs">Main</span>
+        )}
       </div>
       <button
         type="button"
