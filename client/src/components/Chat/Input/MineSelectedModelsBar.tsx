@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react';
 import { useAtom } from 'jotai';
 import { Plus, X, GitCompareArrows } from 'lucide-react';
-import type { TConversation } from 'librechat-data-provider';
+import type { EModelEndpoint, TConversation } from 'librechat-data-provider';
 import type { SetterOrUpdater } from 'recoil';
 import {
   MAX_MINE_SELECTED_MODELS,
@@ -54,7 +54,9 @@ export default function MineSelectedModelsBar({
         }
         setAddedConvo({
           ...addedConvo,
-          endpoint: next.endpoint,
+          // LibreChat also represents custom provider ids (e.g. OpenRouter)
+          // through the endpoint enum type when writing conversation state.
+          endpoint: next.endpoint as EModelEndpoint,
           endpointType: undefined,
           model: next.model,
           spec: undefined,
