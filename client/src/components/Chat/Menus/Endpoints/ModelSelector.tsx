@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { TooltipAnchor } from '@librechat/client';
-import { getConfigDefaults } from 'librechat-data-provider';
+import { EModelEndpoint, getConfigDefaults } from 'librechat-data-provider';
 import type { ModelSelectorProps } from '~/common';
 import {
   renderModelSpecs,
@@ -66,6 +66,13 @@ function ModelSelectorContent() {
     [localize, agentsMap, modelSpecs, selectedValues, mappedEndpoints],
   );
 
+  // A model catalog isn't the same as an enabled chat endpoint. Do not offer
+  // unconfigured providers as working models: direct users to the server setup.
+  const onlyAgentsAvailable =
+    (mappedEndpoints?.length ?? 0) === 1 &&
+    mappedEndpoints?.[0]?.value === EModelEndpoint.agents &&
+    modelSpecs.length === 0;
+
   const trigger = (
     <TooltipAnchor
       aria-label={localize('com_ui_select_model')}
@@ -122,6 +129,15 @@ function ModelSelectorContent() {
             {renderEndpoints(mappedEndpoints ?? [])}
             {/* Render custom groups (specs with group field not matching any endpoint) */}
             {renderCustomGroups(modelSpecs || [], mappedEndpoints ?? [])}
+            {onlyAgentsAvailable && (
+              <div
+                role="status"
+                className="text-text-secondary border-border-light border-t px-3 py-3 text-xs"
+              >
+                No chat providers are enabled yet. Connect OpenAI, Anthropic, or Google
+                through the MINE BYOK server setup, then reload this menu.
+              </div>
+            )}
           </>
         )}
       </Menu>
