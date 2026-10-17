@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState, useMemo, memo, useRef } from 'react';
+import { Compass, ArrowRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useAtomValue } from 'jotai';
 import { useRecoilValue } from 'recoil';
 import type { InfiniteQueryObserverResult } from '@tanstack/react-query';
@@ -39,6 +41,7 @@ const chatsHeaderTrailing = <ChatFilterMenu />;
 
 const ConversationsSection = memo(() => {
   const localize = useLocalize();
+  const navigate = useNavigate();
   const isSmallScreen = useDrawerViewport();
   const { setSidebarOpen } = useSidebarToggle();
   const { isAuthenticated } = useAuthContext();
@@ -237,6 +240,25 @@ const ConversationsSection = memo(() => {
             </div>
           </div>
         )}
+        {/* Persistent capability discovery. Chat remains the default; tool discovery
+            is still reachable without knowing any hidden prompt or command. */}
+        <div className="px-3 pb-2">
+          <button
+            type="button"
+            data-testid="mine-explore-features"
+            onClick={() => {
+              navigate('/explore');
+              if (isSmallScreen) {
+                setSidebarOpen(false);
+              }
+            }}
+            className="border-border-light bg-surface-secondary hover:bg-surface-hover text-text-primary flex w-full items-center gap-2.5 rounded-xl border px-3 py-2 text-left text-sm transition-colors"
+          >
+            <Compass className="text-text-secondary size-4 shrink-0" aria-hidden="true" />
+            <span className="min-w-0 flex-1 truncate font-medium">Explore all features</span>
+            <ArrowRight className="text-text-secondary size-4 shrink-0" aria-hidden="true" />
+          </button>
+        </div>
         {/* The search field owns this row alone; filtering and ordering moved beside the
           Chats heading, where the list they act on is labelled. On mobile the field
           itself lives in the drawer's bottom bar, within thumb reach. */}
