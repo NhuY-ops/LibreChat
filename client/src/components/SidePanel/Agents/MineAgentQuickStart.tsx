@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Constants } from 'librechat-data-provider';
 import { ChevronDown, ChevronUp, Sparkles, X } from 'lucide-react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import type { AgentForm } from '~/common';
@@ -26,7 +27,7 @@ export default function MineAgentQuickStart() {
     setValue('instructionsSource', 'inline', { shouldDirty: true, shouldValidate: true });
     setValue('instructionsPrompt', null, { shouldDirty: true, shouldValidate: true });
     setValue('instructions', template.instructions, { shouldDirty: true, shouldValidate: true });
-    setValue('conversation_starters', [...template.starters], {
+    setValue('conversation_starters', template.starters.slice(0, Constants.MAX_CONVO_STARTERS), {
       shouldDirty: true,
       shouldValidate: true,
     });
@@ -118,7 +119,11 @@ export default function MineAgentQuickStart() {
                 <button
                   type="button"
                   className="border-border-light bg-surface-tertiary text-text-primary rounded-md border px-2.5 py-1.5 text-xs font-medium"
-                  onClick={() => apply(pending)}
+                  onClick={() => {
+                    if (pending) {
+                      apply(pending);
+                    }
+                  }}
                 >
                   Replace draft
                 </button>
