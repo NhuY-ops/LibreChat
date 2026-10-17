@@ -291,6 +291,13 @@ export default function SkillsSection({ items, onInfo, onRemove, onAdd }: Props)
           />
         </div>
       </div>
+      <p className="text-text-secondary mt-1 mb-2 text-xs leading-5" role="note">
+        {mode === SkillsScope.none
+          ? 'Off: the Agent does not use skills.'
+          : mode === SkillsScope.all
+            ? 'All: the Agent may use every skill available to it. Review permissions and shared skills before enabling.'
+            : 'Selected: the Agent may use only the skills you explicitly add below.'}
+      </p>
 
       {/** One animator for the whole body: opening from Off, swapping All for
        *   Selected, and expanding the available list all tween the same
