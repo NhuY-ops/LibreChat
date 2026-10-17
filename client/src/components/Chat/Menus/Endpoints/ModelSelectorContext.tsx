@@ -1,8 +1,11 @@
 import React, { createContext, useContext, useState, useMemo, useCallback } from 'react';
+import { useRecoilState } from 'recoil';
 import debounce from 'lodash/debounce';
 import {
   EModelEndpoint,
   PermissionBits,
+  PermissionTypes,
+  Permissions,
   isAgentsEndpoint,
   isAssistantsEndpoint,
 } from 'librechat-data-provider';
@@ -14,12 +17,14 @@ import {
   useKeyDialog,
   useEndpoints,
   useLocalize,
+  useHasAccess,
 } from '~/hooks';
 import { useAgentsMapContext, useAssistantsMapContext, useLiveAnnouncer } from '~/Providers';
 import { useGetEndpointsQuery, useListAgentsQuery } from '~/data-provider';
 import { useModelSelectorChatContext } from './ModelSelectorChatContext';
 import useSelectMention from '~/hooks/Input/useSelectMention';
 import { filterItems } from './utils';
+import store from '~/store';
 
 type ModelSelectorContextType = {
   // State
@@ -42,6 +47,12 @@ type ModelSelectorContextType = {
   handleSelectSpec: (spec: t.TModelSpec) => void;
   handleSelectEndpoint: (endpoint: Endpoint) => void;
   handleSelectModel: (endpoint: Endpoint, model: string) => void;
+  compareMode: boolean;
+  setCompareMode: (enabled: boolean) => void;
+  comparison: t.TConversation | null;
+  isComparedModel: (endpoint: string, model: string) => boolean;
+  toggleComparedModel: (endpoint: Endpoint, model: string) => void;
+  clearComparison: () => void;
 } & ReturnType<typeof useKeyDialog>;
 
 const ModelSelectorContext = createContext<ModelSelectorContextType | undefined>(undefined);
@@ -67,6 +78,12 @@ export function ModelSelectorProvider({ children, startupConfig }: ModelSelector
     useModelSelectorChatContext();
   const localize = useLocalize();
   const { announcePolite } = useLiveAnnouncer();
+  const [comparison, setComparison] = useRecoilState(store.conversationByIndex(1));
+  const [compareMode, setCompareMode] = useState(false);
+  const canCompare = useHasAccess({
+    permissionType: PermissionTypes.MULTI_CONVO,
+    permission: Permissions.USE,
+  });
   const modelSpecs = useMemo(() => {
     /** Labels are normalized at the startup-config query boundary. */
     const specs = startupConfig?.modelSpecs?.list ?? [];
@@ -200,6 +217,57 @@ export function ModelSelectorProvider({ children, startupConfig }: ModelSelector
     }));
   }, []);
 
+  // LibreChat currently supports a second response pane (index 1), not an arbitrary
+  // number of simultaneous requests. Always write through its existing Recoil
+  // conversation state so the shared composer sends real messages to both models.
+  const isComparedModel = useCallback(
+    (ep: string, selectedModel: string) =>
+      comparison?.endpoint === ep && comparison?.model === selectedModel,
+    [comparison?.endpoint, comparison?.model],
+  );
+
+  const clearComparison = useCallback(() => setComparison(null), [setComparison]);
+
+  const toggleComparedModel = useCallback(
+    (chosenEndpoint: Endpoint, chosenModel: string) => {
+      if (
+        canCompare !== true ||
+        !endpoint ||
+        !model ||
+        isAssistantsEndpoint(endpoint) ||
+        !chosenEndpoint.value ||
+        !chosenModel
+      ) {
+        return;
+      }
+      if (endpoint === chosenEndpoint.value && model === chosenModel) {
+        // The first pane already owns this model; don't duplicate the same request.
+        return;
+      }
+      if (comparison?.endpoint === chosenEndpoint.value && comparison?.model === chosenModel) {
+        setComparison(null);
+        return;
+      }
+      const base = getConversation();
+      if (!base) {
+        return;
+      }
+      // Clear endpoint-specific identities inherited from the main model.
+      // A compare selection is a normal second chat, not an agent/assistant clone.
+      setComparison({
+        ...base,
+        title: '',
+        endpoint: chosenEndpoint.value as t.EModelEndpoint,
+        endpointType: undefined,
+        model: chosenModel,
+        spec: undefined,
+        agent_id: undefined,
+        assistant_id: undefined,
+      });
+    },
+    [canCompare, comparison?.endpoint, comparison?.model, endpoint, model, getConversation, setComparison],
+  );
+
   const handleSelectSpec = useCallback(
     (spec: t.TModelSpec) => {
       let model = spec.preset.model ?? null;
@@ -277,6 +345,12 @@ export function ModelSelectorProvider({ children, startupConfig }: ModelSelector
       endpointsConfig,
       handleSelectSpec,
       handleSelectModel,
+      compareMode,
+      setCompareMode,
+      comparison: comparison ?? null,
+      isComparedModel,
+      toggleComparedModel,
+      clearComparison,
       setSelectedValues,
       handleSelectEndpoint,
       setEndpointSearchValue,
@@ -296,6 +370,11 @@ export function ModelSelectorProvider({ children, startupConfig }: ModelSelector
       endpointsConfig,
       handleSelectSpec,
       handleSelectModel,
+      compareMode,
+      comparison,
+      isComparedModel,
+      toggleComparedModel,
+      clearComparison,
       setSelectedValues,
       handleSelectEndpoint,
       setEndpointSearchValue,
