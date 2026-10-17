@@ -48,6 +48,7 @@ type ModelSelectorContextType = {
   handleSelectEndpoint: (endpoint: Endpoint) => void;
   handleSelectModel: (endpoint: Endpoint, model: string) => void;
   compareMode: boolean;
+  compareAllowed: boolean;
   setCompareMode: (enabled: boolean) => void;
   comparison: t.TConversation | null;
   isComparedModel: (endpoint: string, model: string) => boolean;
@@ -332,6 +333,9 @@ export function ModelSelectorProvider({ children, startupConfig }: ModelSelector
     [agentsMap, announcePolite, assistantsMap, getModelDisplayName, localize, onSelectEndpoint],
   );
 
+  const compareAllowed =
+    canCompare === true && !!endpoint && !!model && !isAssistantsEndpoint(endpoint);
+
   const value = useMemo(
     () => ({
       searchValue,
@@ -346,6 +350,7 @@ export function ModelSelectorProvider({ children, startupConfig }: ModelSelector
       handleSelectSpec,
       handleSelectModel,
       compareMode,
+      compareAllowed,
       setCompareMode,
       comparison: comparison ?? null,
       isComparedModel,
@@ -371,6 +376,7 @@ export function ModelSelectorProvider({ children, startupConfig }: ModelSelector
       handleSelectSpec,
       handleSelectModel,
       compareMode,
+      compareAllowed,
       comparison,
       isComparedModel,
       toggleComparedModel,
