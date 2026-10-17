@@ -532,6 +532,20 @@ const ProjectsSection = ({ toggleNav, isAuthenticated }: ProjectsSectionProps) =
           />
         </button>
         <TooltipAnchor
+          description={localize('com_ui_new_project')}
+          render={
+            <button
+              type="button"
+              aria-label={localize('com_ui_new_project')}
+              data-testid="mine-create-project-shortcut"
+              className={iconButtonClassName}
+              onClick={() => setIsCreateOpen(true)}
+            >
+              <FolderPlus className="h-4 w-4" aria-hidden="true" />
+            </button>
+          }
+        />
+        <TooltipAnchor
           description={localize('com_ui_all_projects')}
           render={
             <button
