@@ -1,6 +1,7 @@
 import { Check, Circle, Info } from 'lucide-react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import type { AgentForm, StringOption } from '~/common';
+import { isRestrictedInstructionsPrompt } from './instructionsPromptUtils';
 
 /**
  * Lightweight configuration checklist. This is guidance, not a replacement for
@@ -25,15 +26,17 @@ export default function MineAgentSetupGuide() {
     typeof providerOption === 'string'
       ? providerOption
       : ((providerOption as StringOption | undefined)?.value ?? '');
+  const promptConfigured =
+    instructionsPrompt != null &&
+    !isRestrictedInstructionsPrompt(instructionsPrompt) &&
+    Boolean(instructionsPrompt.groupId);
   const tasks = [
     { label: 'Agent name', done: Boolean(name?.trim()) },
     { label: 'Provider & model', done: Boolean(provider && model?.trim()) },
     {
       label: 'Instructions',
       done:
-        instructionsSource === 'prompt'
-          ? Boolean(instructionsPrompt?.groupId)
-          : Boolean(instructions?.trim()),
+        instructionsSource === 'prompt' ? promptConfigured : Boolean(instructions?.trim()),
     },
   ];
   const completed = tasks.filter((task) => task.done).length;
