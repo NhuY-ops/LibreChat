@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { TooltipAnchor } from '@librechat/client';
 import { getConfigDefaults } from 'librechat-data-provider';
 import type { ModelSelectorProps } from '~/common';
@@ -82,6 +83,11 @@ function ModelSelectorContent() {
             </div>
           )}
           <span className="truncate text-left">{selectedDisplayValue}</span>
+          <ChevronDown
+            size={14}
+            className="text-text-secondary ml-0.5 shrink-0"
+            aria-hidden="true"
+          />
         </button>
       }
     />
