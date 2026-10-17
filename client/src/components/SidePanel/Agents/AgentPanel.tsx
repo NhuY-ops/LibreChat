@@ -1016,9 +1016,10 @@ export default function AgentPanel() {
                     e.preventDefault();
                     handleSelectAgent();
                   }}
-                  aria-label={localize('com_ui_select_agent')}
+                  aria-label="Use this Agent in Chat"
+                  title="Switch the current Chat to this Agent"
                 >
-                  {localize('com_ui_select')}
+                  Use in Chat
                 </Button>
               </div>
             )}
