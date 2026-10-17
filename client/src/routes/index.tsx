@@ -19,6 +19,7 @@ import dashboardRoutes from './Dashboard';
 import WithRum from '~/lib/rum/WithRum';
 import ShareRoute from './ShareRoute';
 import ChatRoute from './ChatRoute';
+import ExploreFeatures from '~/components/Mine/ExploreFeatures';
 import Search from './Search';
 import Root from './Root';
 
@@ -144,6 +145,10 @@ export const router = createBrowserRouter(
                 {
                   path: 'search',
                   element: <Search />,
+                },
+                {
+                  path: 'explore',
+                  element: <ExploreFeatures />,
                 },
                 {
                   path: 'prompts',
