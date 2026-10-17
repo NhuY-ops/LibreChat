@@ -224,6 +224,19 @@ const ConversationsSection = memo(() => {
         role="region"
         aria-label={localize('com_ui_chat_history')}
       >
+        {/* MINE branding lives within the expanded History panel, keeping the collapsed
+            icon rail and keyboard navigation unchanged. */}
+        {!isSmallScreen && (
+          <div className="mb-3 flex shrink-0 items-center gap-2.5 px-3 pt-1">
+            <img src="assets/logo.svg" alt="" className="h-9 w-9 shrink-0 rounded-xl" />
+            <div className="flex min-w-0 flex-col">
+              <span className="text-text-primary truncate text-sm font-semibold tracking-tight">
+                MINE AI
+              </span>
+              <span className="text-text-secondary truncate text-xs">One platform. Every AI.</span>
+            </div>
+          </div>
+        )}
         {/* The search field owns this row alone; filtering and ordering moved beside the
           Chats heading, where the list they act on is labelled. On mobile the field
           itself lives in the drawer's bottom bar, within thumb reach. */}
