@@ -144,10 +144,12 @@ const SearchableContext = React.createContext(false);
 
 export interface CustomMenuItemProps extends Omit<Ariakit.ComboboxItemProps, 'store'> {
   name?: string;
+  /** Keep the model list open while adding/removing a compare model. */
+  keepOpenOnSelection?: boolean;
 }
 
 export const CustomMenuItem = React.forwardRef<HTMLDivElement, CustomMenuItemProps>(
-  function CustomMenuItem({ name, value, ...props }, ref) {
+  function CustomMenuItem({ name, value, keepOpenOnSelection = false, ...props }, ref) {
     const menu = Ariakit.useMenuContext();
     const searchable = React.useContext(SearchableContext);
     const defaultProps: CustomMenuItemProps = {
@@ -230,6 +232,9 @@ export const CustomMenuItem = React.forwardRef<HTMLDivElement, CustomMenuItemPro
           return true;
         }}
         hideOnClick={(event) => {
+          if (keepOpenOnSelection) {
+            return false;
+          }
           // Make sure that clicking on a combobox item that opens a nested
           // menu/dialog does not close the menu.
           const expandable = event.currentTarget.hasAttribute('aria-expanded');
