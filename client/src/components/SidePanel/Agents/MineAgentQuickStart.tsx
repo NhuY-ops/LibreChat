@@ -1,0 +1,139 @@
+import { useState } from 'react';
+import { ChevronDown, ChevronUp, Sparkles, X } from 'lucide-react';
+import { useFormContext, useWatch } from 'react-hook-form';
+import type { AgentForm } from '~/common';
+import { MINE_AGENT_TEMPLATES } from './mineAgentTemplates';
+import type { MineAgentTemplate } from './mineAgentTemplates';
+
+/**
+ * Starter templates for unsaved Agents only. Nothing executes or creates an
+ * Agent until the existing React Hook Form submit handler succeeds.
+ * The selected provider/model and existing tools/skills are never changed.
+ */
+export default function MineAgentQuickStart() {
+  const { control, getValues, setValue } = useFormContext<AgentForm>();
+  const agentId = useWatch({ control, name: 'id' });
+  const [expanded, setExpanded] = useState(true);
+  const [pending, setPending] = useState<MineAgentTemplate | null>(null);
+
+  if (agentId) {
+    return null;
+  }
+
+  const apply = (template: MineAgentTemplate) => {
+    setValue('name', template.name, { shouldDirty: true, shouldValidate: true });
+    setValue('description', template.description, { shouldDirty: true, shouldValidate: true });
+    setValue('instructionsSource', 'inline', { shouldDirty: true, shouldValidate: true });
+    setValue('instructionsPrompt', null, { shouldDirty: true, shouldValidate: true });
+    setValue('instructions', template.instructions, { shouldDirty: true, shouldValidate: true });
+    setValue('conversation_starters', [...template.starters], {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+    setValue('conversation_starter_draft', '', { shouldDirty: false });
+    setPending(null);
+  };
+
+  const choose = (template: MineAgentTemplate) => {
+    const current = getValues();
+    const hasDraft = Boolean(
+      current.name?.trim() ||
+        current.description?.trim() ||
+        current.instructions?.trim() ||
+        (current.conversation_starters?.length ?? 0) > 0 ||
+        current.instructionsSource === 'prompt',
+    );
+    if (hasDraft) {
+      setPending(template);
+      return;
+    }
+    apply(template);
+  };
+
+  return (
+    <section className="border-border-light bg-surface-secondary mb-3 rounded-xl border p-2.5">
+      <button
+        type="button"
+        className="text-text-primary flex w-full items-center justify-between gap-2 text-left"
+        aria-expanded={expanded}
+        onClick={() => {
+          setExpanded((value) => !value);
+          setPending(null);
+        }}
+      >
+        <span className="flex items-center gap-2 text-xs font-semibold">
+          <Sparkles className="size-4" aria-hidden="true" />
+          Start with an Agent template
+        </span>
+        {expanded ? (
+          <ChevronUp className="text-text-secondary size-4" aria-hidden="true" />
+        ) : (
+          <ChevronDown className="text-text-secondary size-4" aria-hidden="true" />
+        )}
+      </button>
+
+      {expanded && (
+        <div className="mt-2">
+          <p className="text-text-secondary mb-2 text-xs">
+            Pick a starting point, then customize it. Your model, API keys and tools stay unchanged.
+          </p>
+          <div className="flex gap-2 overflow-x-auto pb-1" aria-label="MINE Agent templates">
+            {MINE_AGENT_TEMPLATES.map((template) => (
+              <button
+                key={template.id}
+                type="button"
+                className="border-border-light bg-surface-primary text-text-primary hover:bg-surface-hover focus-visible:ring-text-primary flex min-w-28 max-w-32 shrink-0 flex-col items-start gap-1 rounded-lg border px-2.5 py-2 text-left focus-visible:outline-none focus-visible:ring-2"
+                onClick={() => choose(template)}
+                aria-label={'Use ' + template.title + ' Agent template'}
+              >
+                <span className="text-xs font-semibold">{template.title}</span>
+                <span className="text-text-secondary text-[11px] leading-4">
+                  {template.categoryLabel}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          {pending && (
+            <div
+              className="border-border-medium bg-surface-primary mt-2 rounded-lg border p-2"
+              role="group"
+              aria-label="Confirm Agent template replacement"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-text-primary text-xs">
+                  Replace your current name, description, instructions and starters with
+                  the <strong>{pending.title}</strong> template?
+                </p>
+                <button
+                  type="button"
+                  className="text-text-secondary hover:text-text-primary shrink-0"
+                  aria-label="Cancel template replacement"
+                  onClick={() => setPending(null)}
+                >
+                  <X className="size-3.5" aria-hidden="true" />
+                </button>
+              </div>
+              <div className="mt-2 flex gap-2">
+                <button
+                  type="button"
+                  className="border-border-light bg-surface-tertiary text-text-primary rounded-md border px-2.5 py-1.5 text-xs font-medium"
+                  onClick={() => apply(pending)}
+                >
+                  Replace draft
+                </button>
+                <button
+                  type="button"
+                  className="text-text-secondary rounded-md px-2 py-1.5 text-xs"
+                  onClick={() => setPending(null)}
+                >
+                  Keep my work
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
