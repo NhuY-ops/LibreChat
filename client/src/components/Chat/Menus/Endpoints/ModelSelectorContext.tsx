@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useMemo, useCallback } from 'react';
 import { useRecoilState } from 'recoil';
+import { useAtom } from 'jotai';
 import debounce from 'lodash/debounce';
 import {
   EModelEndpoint,
@@ -25,6 +26,12 @@ import { useModelSelectorChatContext } from './ModelSelectorChatContext';
 import useSelectMention from '~/hooks/Input/useSelectMention';
 import { filterItems } from './utils';
 import store from '~/store';
+import {
+  MAX_MINE_SELECTED_MODELS,
+  mineExtraModelsAtom,
+  sameMineModel,
+} from './mineSelection';
+import type { MineModelChoice } from './mineSelection';
 
 type ModelSelectorContextType = {
   // State
@@ -51,6 +58,7 @@ type ModelSelectorContextType = {
   compareAllowed: boolean;
   setCompareMode: (enabled: boolean) => void;
   comparison: t.TConversation | null;
+  extraModels: MineModelChoice[];
   isComparedModel: (endpoint: string, model: string) => boolean;
   toggleComparedModel: (endpoint: Endpoint, model: string) => void;
   clearComparison: () => void;
@@ -80,6 +88,7 @@ export function ModelSelectorProvider({ children, startupConfig }: ModelSelector
   const localize = useLocalize();
   const { announcePolite } = useLiveAnnouncer();
   const [comparison, setComparison] = useRecoilState(store.conversationByIndex(1));
+  const [extraModels, setExtraModels] = useAtom(mineExtraModelsAtom);
   const [compareMode, setCompareMode] = useState(false);
   const canCompare = useHasAccess({
     permissionType: PermissionTypes.MULTI_CONVO,
@@ -218,16 +227,33 @@ export function ModelSelectorProvider({ children, startupConfig }: ModelSelector
     }));
   }, []);
 
-  // LibreChat currently supports a second response pane (index 1), not an arbitrary
-  // number of simultaneous requests. Always write through its existing Recoil
-  // conversation state so the shared composer sends real messages to both models.
+  // MINE stores up to ${MAX_MINE_SELECTED_MODELS} chosen models, without
+  // pretending LibreChat's current two-pane send can run all of them.
+  // The first additional model is bound to the real compare conversation.
   const isComparedModel = useCallback(
     (ep: string, selectedModel: string) =>
-      comparison?.endpoint === ep && comparison?.model === selectedModel,
-    [comparison?.endpoint, comparison?.model],
+      (comparison?.endpoint === ep && comparison?.model === selectedModel) ||
+      extraModels.some((item) => item.endpoint === ep && item.model === selectedModel),
+    [comparison?.endpoint, comparison?.model, extraModels],
   );
 
-  const clearComparison = useCallback(() => setComparison(null), [setComparison]);
+  const clearComparison = useCallback(() => {
+    const next = extraModels[0];
+    if (!next || !comparison) {
+      setComparison(null);
+      return;
+    }
+    setComparison({
+      ...comparison,
+      endpoint: next.endpoint as t.EModelEndpoint,
+      endpointType: undefined,
+      model: next.model,
+      spec: undefined,
+      agent_id: undefined,
+      assistant_id: undefined,
+    });
+    setExtraModels(extraModels.slice(1));
+  }, [comparison, extraModels, setComparison, setExtraModels]);
 
   const toggleComparedModel = useCallback(
     (chosenEndpoint: Endpoint, chosenModel: string) => {
@@ -237,36 +263,59 @@ export function ModelSelectorProvider({ children, startupConfig }: ModelSelector
         !model ||
         isAssistantsEndpoint(endpoint) ||
         !chosenEndpoint.value ||
-        !chosenModel
+        !chosenModel ||
+        isAgentsEndpoint(chosenEndpoint.value) ||
+        isAssistantsEndpoint(chosenEndpoint.value)
       ) {
         return;
       }
-      if (endpoint === chosenEndpoint.value && model === chosenModel) {
-        // The first pane already owns this model; don't duplicate the same request.
+      const choice: MineModelChoice = { endpoint: chosenEndpoint.value, model: chosenModel };
+      if (sameMineModel(choice, { endpoint, model })) {
         return;
       }
-      if (comparison?.endpoint === chosenEndpoint.value && comparison?.model === chosenModel) {
-        setComparison(null);
+      if (comparison?.endpoint === choice.endpoint && comparison?.model === choice.model) {
+        clearComparison();
+        return;
+      }
+      if (extraModels.some((item) => sameMineModel(item, choice))) {
+        setExtraModels((current) => current.filter((item) => !sameMineModel(item, choice)));
+        return;
+      }
+      if (1 + Number(Boolean(comparison?.model)) + extraModels.length >= MAX_MINE_SELECTED_MODELS) {
+        announcePolite({ message: 'MINE allows up to 8 selected models.', isStatus: true });
+        return;
+      }
+      if (comparison) {
+        setExtraModels((current) => [...current, choice]);
         return;
       }
       const base = getConversation();
       if (!base) {
         return;
       }
-      // Clear endpoint-specific identities inherited from the main model.
-      // A compare selection is a normal second chat, not an agent/assistant clone.
       setComparison({
         ...base,
         title: '',
-        endpoint: chosenEndpoint.value as t.EModelEndpoint,
+        endpoint: choice.endpoint as t.EModelEndpoint,
         endpointType: undefined,
-        model: chosenModel,
+        model: choice.model,
         spec: undefined,
         agent_id: undefined,
         assistant_id: undefined,
       });
     },
-    [canCompare, comparison?.endpoint, comparison?.model, endpoint, model, getConversation, setComparison],
+    [
+      canCompare,
+      endpoint,
+      model,
+      comparison,
+      extraModels,
+      clearComparison,
+      announcePolite,
+      getConversation,
+      setComparison,
+      setExtraModels,
+    ],
   );
 
   const handleSelectSpec = useCallback(
@@ -353,6 +402,7 @@ export function ModelSelectorProvider({ children, startupConfig }: ModelSelector
       compareAllowed,
       setCompareMode,
       comparison: comparison ?? null,
+      extraModels,
       isComparedModel,
       toggleComparedModel,
       clearComparison,
@@ -378,6 +428,7 @@ export function ModelSelectorProvider({ children, startupConfig }: ModelSelector
       compareMode,
       compareAllowed,
       comparison,
+      extraModels,
       isComparedModel,
       toggleComparedModel,
       clearComparison,
