@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, GitCompareArrows, X } from 'lucide-react';
 import { TooltipAnchor } from '@librechat/client';
 import { EModelEndpoint, getConfigDefaults } from 'librechat-data-provider';
 import type { ModelSelectorProps } from '~/common';
@@ -41,6 +41,11 @@ function ModelSelectorContent() {
     keyDialogOpen,
     onOpenChange,
     keyDialogEndpoint,
+    compareMode,
+    compareAllowed,
+    comparison,
+    setCompareMode,
+    clearComparison,
   } = useModelSelectorContext();
 
   const selectedIcon = useMemo(
@@ -101,7 +106,7 @@ function ModelSelectorContent() {
   );
 
   return (
-    <div className="relative flex max-w-[60vw] min-w-0 flex-col items-center gap-2 sm:max-w-xs">
+    <div className="relative flex min-w-0 max-w-[80vw] items-center gap-2 sm:max-w-xl">
       <Menu
         values={selectedValues}
         onValuesChange={(values: Record<string, any>) => {
@@ -116,6 +121,40 @@ function ModelSelectorContent() {
         comboboxLabel={localize('com_endpoint_search_models')}
         trigger={trigger}
       >
+        <div className="border-border-light flex items-center justify-between gap-3 border-b px-3 py-2">
+          <div className="min-w-0">
+            <div className="text-text-primary text-xs font-semibold">MINE Model Selector</div>
+            <div className="text-text-secondary text-xs">
+              {compareMode ? 'Choose a second model (2 max)' : 'Choose your main model'}
+            </div>
+          </div>
+          {compareAllowed && (
+            <button
+              type="button"
+              aria-pressed={compareMode}
+              onClick={() => setCompareMode(!compareMode)}
+              className="border-border-light hover:bg-surface-hover text-text-primary flex shrink-0 items-center gap-1 rounded-lg border px-2 py-1.5 text-xs"
+            >
+              <GitCompareArrows className="size-3.5" aria-hidden="true" />
+              {compareMode ? 'Done' : 'Compare +'}
+            </button>
+          )}
+        </div>
+        {comparison?.model && (
+          <div className="border-border-light text-text-secondary flex items-center justify-between gap-2 border-b px-3 py-2 text-xs">
+            <span className="truncate">
+              Comparing with {comparison.model}
+            </span>
+            <button
+              type="button"
+              className="hover:bg-surface-hover rounded p-1"
+              aria-label="Remove comparison model"
+              onClick={clearComparison}
+            >
+              <X className="size-3.5" aria-hidden="true" />
+            </button>
+          </div>
+        )}
         {searchResults ? (
           renderSearchResults(searchResults, localize, searchValue)
         ) : (
@@ -141,6 +180,20 @@ function ModelSelectorContent() {
           </>
         )}
       </Menu>
+      {comparison?.model && (
+        <div className="border-border-chrome bg-presentation text-text-primary flex h-9 min-w-0 max-w-36 items-center gap-1 rounded-theme-control border px-2 text-xs">
+          <GitCompareArrows className="size-3.5 shrink-0" aria-hidden="true" />
+          <span className="truncate" title={comparison.model}>{comparison.model}</span>
+          <button
+            type="button"
+            className="hover:bg-surface-hover shrink-0 rounded p-0.5"
+            aria-label="Remove comparison model"
+            onClick={clearComparison}
+          >
+            <X className="size-3.5" aria-hidden="true" />
+          </button>
+        </div>
+      )}
       <DialogManager
         keyDialogOpen={keyDialogOpen}
         onOpenChange={onOpenChange}
