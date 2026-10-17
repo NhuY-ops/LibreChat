@@ -13,6 +13,8 @@ import { validateEmail, cn } from '~/utils';
 import Instructions from './Instructions';
 import FileContext from './FileContext';
 import AgentAvatar from './AgentAvatar';
+import MineAgentQuickStart from './MineAgentQuickStart';
+import MineAgentSetupGuide from './MineAgentSetupGuide';
 import Starters from './Starters';
 import { Panel } from '~/common';
 
@@ -48,6 +50,8 @@ export default function AgentConfig({
 
   return (
     <div className="h-auto pt-1">
+      {/* New Agent guidance only; never rewrites existing saved agent configurations. */}
+      {!agent_id && <MineAgentQuickStart />}
       {/* IDENTITY — flat header, always visible, avatar inline */}
       <div className="mt-1 mb-3 flex items-center gap-3">
         <div className="shrink-0">
@@ -170,6 +174,9 @@ export default function AgentConfig({
 
       {/* CONVERSATION STARTERS */}
       <Starters />
+
+      {/* This guide is advisory; validation remains in the existing create flow. */}
+      {!agent_id && <MineAgentSetupGuide />}
 
       {/* SUPPORT CONTACT */}
       <div className="mb-3 flex flex-col">
