@@ -56,9 +56,15 @@ export default function MineResearchPilotTools() {
     }
 
     if (id === AgentCapabilities.web_search) {
-      setValue('web_search', true, { shouldDirty: true, shouldValidate: true });
+      setValue(AgentCapabilities.web_search as keyof AgentForm, true as never, {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
     } else if (id === AgentCapabilities.file_search) {
-      setValue('file_search', true, { shouldDirty: true, shouldValidate: true });
+      setValue(AgentCapabilities.file_search as keyof AgentForm, true as never, {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
     } else if (id === 'ask_user_question') {
       const current = getValues('tools') ?? [];
       setValue('tools', Array.from(new Set([...current, id])), {
