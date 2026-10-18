@@ -25,7 +25,9 @@ function AgentFormHarness({
       conversation_starter_draft: '',
       provider: 'openai',
       model: 'test-model',
-    } as AgentForm,
+      model_parameters: {},
+      category: 'general',
+    },
   });
   const values = useWatch({ control: methods.control });
   return (
