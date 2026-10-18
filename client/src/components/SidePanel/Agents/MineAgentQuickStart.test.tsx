@@ -6,6 +6,13 @@ import type { AgentForm } from '~/common';
 import MineAgentQuickStart from './MineAgentQuickStart';
 import MineAgentSetupGuide from './MineAgentSetupGuide';
 
+// Quick-start form tests isolate the optional tool trial, which uses separate
+// provider permissions and queries verified in its own tests.
+jest.mock('./MineResearchPilotTools', () => ({
+  __esModule: true,
+  default: () => null,
+}));
+
 function AgentFormHarness({
   initialName = '',
   agentId = '',
