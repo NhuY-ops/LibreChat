@@ -5,6 +5,7 @@ import { useFormContext, useWatch } from 'react-hook-form';
 import type { AgentForm } from '~/common';
 import { MINE_AGENT_TEMPLATES } from './mineAgentTemplates';
 import type { MineAgentTemplate } from './mineAgentTemplates';
+import MineResearchPilotTools from './MineResearchPilotTools';
 
 /**
  * Starter templates for unsaved Agents only. Nothing executes or creates an
@@ -16,6 +17,7 @@ export default function MineAgentQuickStart() {
   const agentId = useWatch({ control, name: 'id' });
   const [expanded, setExpanded] = useState(true);
   const [pending, setPending] = useState<MineAgentTemplate | null>(null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
 
   if (agentId) {
     return null;
@@ -32,6 +34,7 @@ export default function MineAgentQuickStart() {
       shouldValidate: true,
     });
     setValue('conversation_starter_draft', '', { shouldDirty: false });
+    setSelectedTemplateId(template.id);
     setPending(null);
   };
 
@@ -76,7 +79,7 @@ export default function MineAgentQuickStart() {
       {expanded && (
         <div className="mt-2">
           <p className="text-text-secondary mb-2 text-xs">
-            Pick a starting point, then customize it. Your model, API keys and tools stay unchanged.
+            Pick a starting point, then customize it. Model, keys and tools stay unchanged until you explicitly add a tool.
           </p>
           <div className="flex gap-2 overflow-x-auto pb-1" aria-label="MINE Agent templates">
             {MINE_AGENT_TEMPLATES.map((template) => (
@@ -94,6 +97,7 @@ export default function MineAgentQuickStart() {
               </button>
             ))}
           </div>
+          {selectedTemplateId === 'research' && <MineResearchPilotTools />}
 
           {pending && (
             <div
