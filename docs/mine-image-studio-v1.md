@@ -63,6 +63,35 @@ a separately saved Agent until you choose and save a model. The chat area
 on the right may still show the previously used Research Analyst; that
 is independent of the new-Agent builder draft.
 
+## Fixed: Use template used to reopen Research Analyst V1 (21 October 2026)
+
+Root cause found in the app:
+- The Marketplace set a template id and navigated to `/c/new`, but the
+  Agent Builder was still synchronized to the **current chat**'s `agent_id`.
+  `AgentPanelSwitch` could thus choose **Research Analyst V1** again.
+- The Builder only applied a template from an optional URL query or its own
+  QuickStart button. A route transition could strip that query, showing a
+  blank `Create New Agent` editor while Research remained on the right.
+- An in-flight query for the old saved Agent could reload the old form.
+
+The fixed flow now:
+1. **Use template** sets a same-tab session that separates the unsaved Agent
+   Builder from the previously selected chat.
+2. `AgentPanel` initializes a fresh unsaved draft directly from the chosen
+   template. This is an *editor reset*, **not a server mutation** of the
+   existing saved Research Analyst Agent.
+3. The prior chat's `agent_id` and stale saved-Agent query are prevented from
+   resetting the Image Creator form while that session is active.
+4. **AI Image Creator · Unsaved** is shown in the Agent selector. The
+   QuickStart status confirms the blueprint is loaded; **Image Studio V1**
+   appears automatically, **without a second Apply click**.
+5. Saving creates a new Agent and returns to normal Agent selection. The
+   right-side chat can still be the old Research conversation until the user
+   selects **Use in Chat** for the newly saved Image Creator.
+
+Keep in mind: choosing the template is not a paid generation call. Actual
+media output still requires a configured image Tool.
+
 ## Limits and guarantees
 - **Integration-ready, not end-to-end verified on the user's Mac:** We cannot
   assert an image rendered until the tool is selected, provider access works,
