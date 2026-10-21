@@ -61,6 +61,7 @@ function AgentSelect({
   dirtyFieldsRef.current = dirtyFields;
   const permissionLevel = useAgentDefaultPermissionLevel();
   const { data: startupConfig } = useGetStartupConfig();
+  const draftName = useWatch({ control, name: 'name' });
   const selectorLimit = normalizeAgentSelectorLimit(startupConfig?.interface?.agentSelectorLimit);
 
   const { data: agents = null } = useListAgentsQuery(
@@ -319,7 +320,11 @@ function AgentSelect({
           containerClassName="px-0"
           selectedValue={(field?.value?.value ?? '') + ''}
           displayValue={field?.value?.label ?? ''}
-          selectPlaceholder={field?.value?.value ?? createAgent}
+          selectPlaceholder={
+            activeMarketplaceDraft && !selectedAgentId && draftName?.trim()
+              ? `${draftName.trim()} · Unsaved`
+              : (field?.value?.value ?? createAgent)
+          }
           iconSide="right"
           searchPlaceholder={localize('com_agents_search_name')}
           popoverMaxHeight={SELECTOR_MAX_HEIGHT}
