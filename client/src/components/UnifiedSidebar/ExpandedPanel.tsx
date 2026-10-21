@@ -140,6 +140,7 @@ function ExpandedPanel({
   const effectiveActive = resolveActivePanel(active, links);
   const isInsightsRoute = location.pathname.startsWith('/insights');
   const isMarketplaceRoute = location.pathname.startsWith('/agents');
+  const isKnowledgeRoute = location.pathname.startsWith('/knowledge');
 
   const toggleLabel = expanded ? 'com_nav_close_sidebar' : 'com_nav_open_sidebar';
   const toggleClick = expanded ? onCollapse : onExpand;
@@ -179,14 +180,16 @@ function ExpandedPanel({
                 ? isInsightsRoute
                 : link.id === 'agent-marketplace'
                   ? isMarketplaceRoute
-                  : !isInsightsRoute && !isMarketplaceRoute && link.id === effectiveActive
+                  : link.id === 'knowledge-base'
+                    ? isKnowledgeRoute
+                    : !isInsightsRoute && !isMarketplaceRoute && !isKnowledgeRoute && link.id === effectiveActive
             }
             expanded={expanded ?? true}
             setActive={setActive}
             onExpand={onExpand}
             onCollapse={onCollapse}
             onNavigate={onNavigate}
-            onLeaveInsights={isInsightsRoute || isMarketplaceRoute ? onLeaveInsights : undefined}
+            onLeaveInsights={isInsightsRoute || isMarketplaceRoute || isKnowledgeRoute ? onLeaveInsights : undefined}
           />
         ))}
       </div>

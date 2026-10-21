@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { MCPIcon, OpenAIMinimalIcon } from '@librechat/client';
 import {
   Bot,
+  Database,
   LayoutGrid,
   Brain,
   Bookmark,
@@ -162,6 +163,18 @@ export default function useSideNavLinks({
         icon: ScrollText,
         id: 'skills',
         Component: SkillsAccordion,
+      });
+    }
+
+    // Standalone KB hub: browse the signed-in user's indexed file inventory.
+    // It reuses existing file/RAG infrastructure without exposing another user's data.
+    if (hasAccessToAgents) {
+      links.push({
+        title: 'com_assistants_knowledge',
+        label: '',
+        icon: Database,
+        id: 'knowledge-base',
+        onClick: () => navigate('/knowledge'),
       });
     }
 

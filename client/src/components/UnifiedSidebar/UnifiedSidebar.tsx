@@ -75,6 +75,7 @@ function UnifiedSidebar({
   const links = useUnifiedSidebarLinks();
   const isInsightsRoute = location.pathname.startsWith('/insights');
   const isMarketplaceRoute = location.pathname.startsWith('/agents');
+  const isKnowledgeRoute = location.pathname.startsWith('/knowledge');
   const panelExpanded = expanded && !isInsightsRoute;
 
   /** The aside's max width is a viewport percentage, so the announced range has to track
@@ -109,11 +110,11 @@ function UnifiedSidebar({
   }, [navigate]);
 
   const handlePanelExpand = useCallback(() => {
-    if (isInsightsRoute) {
+    if (isInsightsRoute || isKnowledgeRoute) {
       handleLeaveInsights();
     }
     handleExpand();
-  }, [handleExpand, handleLeaveInsights, isInsightsRoute]);
+  }, [handleExpand, handleLeaveInsights, isInsightsRoute, isKnowledgeRoute]);
 
   const handleResizeStart = useCallback(() => {
     setIsResizing(true);
@@ -252,7 +253,7 @@ function UnifiedSidebar({
             onNewChat={handleCollapse}
             switchToHistory={switchToHistory}
             onLeaveInsights={handleLeaveInsights}
-            routeActiveId={isInsightsRoute ? 'insights' : isMarketplaceRoute ? 'agent-marketplace' : undefined}
+            routeActiveId={isInsightsRoute ? 'insights' : isMarketplaceRoute ? 'agent-marketplace' : isKnowledgeRoute ? 'knowledge-base' : undefined}
           />
           <nav id="chat-history-nav" className="bg-surface-sidebar min-h-0 flex-1 overflow-hidden">
             <SidePanelNav links={links} />
@@ -260,7 +261,7 @@ function UnifiedSidebar({
           <MobileShortcutTargets
             links={links}
             onLeaveInsights={handleLeaveInsights}
-            routeActiveId={isInsightsRoute ? 'insights' : isMarketplaceRoute ? 'agent-marketplace' : undefined}
+            routeActiveId={isInsightsRoute ? 'insights' : isMarketplaceRoute ? 'agent-marketplace' : isKnowledgeRoute ? 'knowledge-base' : undefined}
           />
           <MobileBottomBar links={links} />
         </ActivePanelProvider>
