@@ -1,4 +1,7 @@
 import React from 'react';
+import { act } from '@testing-library/react';
+import { getDefaultStore } from 'jotai';
+import { mineTemplateBuilderSessionAtom } from './mineTemplateHandoff';
 import { RecoilRoot } from 'recoil';
 import { render } from '@testing-library/react';
 import { EModelEndpoint } from 'librechat-data-provider';
@@ -44,7 +47,10 @@ function renderWithConversation(conversation?: TConversation) {
 }
 
 describe('AgentPanelSwitch authorization observers', () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    getDefaultStore().set(mineTemplateBuilderSessionAtom, null);
+  });
 
   it('holds observers until the conversation is hydrated', () => {
     renderWithConversation();
@@ -58,6 +64,31 @@ describe('AgentPanelSwitch authorization observers', () => {
       agent_id: 'agent_1',
     } as TConversation);
     expect(mockObserveToolAuthorization).toHaveBeenLastCalledWith(true);
+  });
+
+  it('keeps a Marketplace Image Creator draft separate from the Research chat Agent', () => {
+    getDefaultStore().set(mineTemplateBuilderSessionAtom, 'image-creator');
+    renderWithConversation({
+      conversationId: 'new',
+      endpoint: EModelEndpoint.agents,
+      agent_id: 'saved_research_agent',
+    } as TConversation);
+    expect(mockSetCurrentAgentId).toHaveBeenCalledWith(undefined);
+    expect(mockSetCurrentAgentId).not.toHaveBeenCalledWith('saved_research_agent');
+  });
+
+  it('does not immediately restore the stale Research chat after saving the new Agent', () => {
+    getDefaultStore().set(mineTemplateBuilderSessionAtom, 'image-creator');
+    renderWithConversation({
+      conversationId: 'new',
+      endpoint: EModelEndpoint.agents,
+      agent_id: 'saved_research_agent',
+    } as TConversation);
+    mockSetCurrentAgentId.mockClear();
+    act(() => {
+      getDefaultStore().set(mineTemplateBuilderSessionAtom, null);
+    });
+    expect(mockSetCurrentAgentId).not.toHaveBeenCalledWith('saved_research_agent');
   });
 
   it('keeps observers disabled for a hydrated ephemeral agent', () => {
