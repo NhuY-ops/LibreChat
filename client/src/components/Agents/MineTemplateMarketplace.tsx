@@ -21,7 +21,7 @@ import type { LucideIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { EModelEndpoint } from 'librechat-data-provider';
 import { activePanelAtom } from '~/Providers';
-import { mineTemplateHandoffAtom } from '~/components/SidePanel/Agents/mineTemplateHandoff';
+import { mineTemplateBuilderSessionAtom, mineTemplateHandoffAtom } from '~/components/SidePanel/Agents/mineTemplateHandoff';
 import { MINE_AGENT_TEMPLATES } from '~/components/SidePanel/Agents/mineAgentTemplates';
 import type { MineAgentTemplate, MineCreativeCollection } from '~/components/SidePanel/Agents/mineAgentTemplates';
 
@@ -77,6 +77,7 @@ export default function MineTemplateMarketplace({ searchQuery = '' }: { searchQu
   const navigate = useNavigate();
   const setActivePanel = useSetAtom(activePanelAtom);
   const setTemplateHandoff = useSetAtom(mineTemplateHandoffAtom);
+  const setTemplateBuilderSession = useSetAtom(mineTemplateBuilderSessionAtom);
   const [filter, setFilter] = useState<CollectionFilter>('all');
   const [previewId, setPreviewId] = useState<string | null>(null);
   const counts = useMemo(() => {
@@ -105,6 +106,7 @@ export default function MineTemplateMarketplace({ searchQuery = '' }: { searchQu
     // keep the URL parameter for deep links and transparent navigation.
     // No Agent is created, modified or charged by this operation.
     setTemplateHandoff(template.id);
+    setTemplateBuilderSession(template.id);
     setActivePanel(EModelEndpoint.agents);
     navigate(`/c/new?mineAgentTemplate=${encodeURIComponent(template.id)}`);
   };
