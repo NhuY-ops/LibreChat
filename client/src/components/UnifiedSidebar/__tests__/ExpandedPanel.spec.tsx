@@ -3,7 +3,7 @@ import { RecoilRoot } from 'recoil';
 import { getDefaultStore } from 'jotai';
 import '@testing-library/jest-dom/extend-expect';
 import { MemoryRouter } from 'react-router-dom';
-import { MessagesSquare, NotebookPen } from 'lucide-react';
+import { Bot, LayoutGrid, MessagesSquare, NotebookPen } from 'lucide-react';
 import { render, fireEvent, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { NavLink } from '~/common';
@@ -105,6 +105,7 @@ function renderPanel({
   onExpand = jest.fn(),
   onNavigate,
   initialPanel = DEFAULT_PANEL,
+  initialRoute = '/',
   switchToHistory = true,
 }: {
   expanded?: boolean;
@@ -113,12 +114,13 @@ function renderPanel({
   onExpand?: jest.Mock;
   onNavigate?: jest.Mock;
   initialPanel?: string;
+  initialRoute?: string;
   switchToHistory?: boolean;
 } = {}) {
   getDefaultStore().set(activePanelAtom, initialPanel);
 
   const result = render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[initialRoute]}>
       <QueryClientProvider client={createQueryClient()}>
         <RecoilRoot>
           <ActivePanelProvider>
@@ -222,6 +224,50 @@ describe('ExpandedPanel', () => {
       expect(screen.getByTestId('close-sidebar-button')).toHaveClass('hover:bg-surface-nav-hover');
       expect(screen.getByTestId('new-chat-button')).toHaveClass('hover:bg-surface-nav-hover');
       expect(screen.getByTestId('new-chat-button')).not.toHaveClass('hover:bg-surface-hover');
+    });
+  });
+
+  describe('Agent Marketplace navigation placement', () => {
+    const links = (onClick: jest.Mock): NavLink[] => [
+      ...createLinks(),
+      {
+        title: 'com_sidepanel_agent_builder' as const,
+        icon: Bot,
+        id: 'agents',
+      },
+      {
+        title: 'com_agents_marketplace' as const,
+        icon: LayoutGrid,
+        id: 'agent-marketplace',
+        onClick,
+      },
+    ];
+
+    it('shows Marketplace immediately under Agent Builder in the rail', () => {
+      const openMarketplace = jest.fn();
+      renderPanel({ links: links(openMarketplace) });
+      const builder = screen.getByTestId('nav-panel-agents');
+      const marketplace = screen.getByTestId('nav-panel-agent-marketplace');
+      expect(builder.nextElementSibling).toBe(marketplace);
+      fireEvent.click(marketplace);
+      expect(openMarketplace).toHaveBeenCalledTimes(1);
+      expect(getDefaultStore().get(activePanelAtom)).toBe(DEFAULT_PANEL);
+    });
+
+    it('marks Marketplace as active on the templates route', () => {
+      renderPanel({
+        initialRoute: '/agents/templates',
+        initialPanel: 'agents',
+        links: links(jest.fn()),
+      });
+      expect(screen.getByTestId('nav-panel-agent-marketplace')).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
+      expect(screen.getByTestId('nav-panel-agents')).toHaveAttribute(
+        'aria-pressed',
+        'false',
+      );
     });
   });
 
