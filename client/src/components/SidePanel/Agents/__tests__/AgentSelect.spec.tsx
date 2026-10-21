@@ -2,7 +2,7 @@ import React from 'react';
 import { getDefaultStore } from 'jotai';
 import { mineTemplateBuilderSessionAtom } from '../mineTemplateHandoff';
 import { useForm, FormProvider } from 'react-hook-form';
-import { render, waitFor } from '@testing-library/react';
+import { act, render, waitFor } from '@testing-library/react';
 import type { UseMutationResult, QueryObserverResult } from '@tanstack/react-query';
 import type { Agent, AgentCreateParams } from 'librechat-data-provider';
 import type { UseFormReturn } from 'react-hook-form';
@@ -34,11 +34,15 @@ function Harness({
   onMethods,
   instructionsPromptReady,
   defaultValues,
+  selectedAgentId,
+  setCurrentAgentId,
 }: {
   agent: Agent;
   onMethods: (methods: UseFormReturn<AgentForm>) => void;
   instructionsPromptReady?: boolean;
   defaultValues?: Partial<AgentForm>;
+  selectedAgentId?: string | null;
+  setCurrentAgentId?: jest.Mock;
 }) {
   const methods = useForm<AgentForm>({ defaultValues });
   onMethods(methods);
@@ -47,12 +51,10 @@ function Harness({
     <FormProvider {...methods}>
       <AgentSelect
         agentQuery={{ data: agent, isSuccess: true } as unknown as QueryObserverResult<Agent>}
-        /** `null`, not `agent.id`: a non-null value with no matching row in the (empty,
-         * mocked) agent list schedules `onSelect`'s "not found" timer, which would reset
-         * the whole form back to defaults out from under this test. The load effect this
-         * test targets keys off `agentQuery.data` alone. */
-        selectedAgentId={null}
-        setCurrentAgentId={jest.fn()}
+        /** The list query is empty in this test; a matching saved query can
+         * still hydrate directly without a synthetic selector click. */
+        selectedAgentId={selectedAgentId === undefined ? agent.id : selectedAgentId}
+        setCurrentAgentId={setCurrentAgentId ?? jest.fn()}
         createMutation={
           { reset: jest.fn() } as unknown as UseMutationResult<Agent, Error, AgentCreateParams>
         }
@@ -92,6 +94,45 @@ describe('AgentSelect resetAgentForm', () => {
     await waitFor(() => expect(methods?.getValues('name')).toBe('AI Image Creator'));
     expect(methods?.getValues('instructions')).toBe('New image generation Agent instructions');
     expect(methods?.getValues('instructionsSource')).toBe('inline');
+  });
+
+  it('does not hydrate a stale Research query over a new unsaved Image Creator draft', async () => {
+    let methods: UseFormReturn<AgentForm> | undefined;
+    render(
+      <Harness
+        agent={createAgent({ id: 'old_research', name: 'Research Analyst V1', instructions: 'Research' })}
+        selectedAgentId={null}
+        defaultValues={{ id: '', name: 'AI Image Creator', instructions: 'Image Studio V1' }}
+        onMethods={(m) => (methods = m)}
+      />,
+    );
+
+    expect(methods?.getValues('name')).toBe('AI Image Creator');
+    expect(methods?.getValues('instructions')).toBe('Image Studio V1');
+  });
+
+  it('does not clear a newly saved Image Creator while the agent list and query are stale', async () => {
+    let methods: UseFormReturn<AgentForm> | undefined;
+    const setCurrentAgentId = jest.fn();
+    render(
+      <Harness
+        agent={createAgent({ id: 'old_research', name: 'Research Analyst V1', instructions: 'Research' })}
+        selectedAgentId="new_image_agent"
+        setCurrentAgentId={setCurrentAgentId}
+        defaultValues={{ id: 'new_image_agent', name: 'AI Image Creator', instructions: 'Image Studio V1' }}
+        onMethods={(m) => (methods = m)}
+      />,
+    );
+
+    // Previous selector code scheduled an automatic "not found" selection
+    // after 5ms, resetting the newly saved Agent to Create New Agent.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    });
+    expect(setCurrentAgentId).not.toHaveBeenCalledWith(undefined);
+    expect(methods?.getValues('id')).toBe('new_image_agent');
+    expect(methods?.getValues('name')).toBe('AI Image Creator');
+    expect(methods?.getValues('instructions')).toBe('Image Studio V1');
   });
 
   it('maps a linked agent to Prompt mode with the link copied verbatim', async () => {

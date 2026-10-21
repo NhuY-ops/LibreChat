@@ -253,19 +253,25 @@ function AgentSelect({
         : undefined);
 
       createMutation.reset();
-      if (!agentExists) {
+      if (!selectedId) {
         setCurrentAgentId(undefined);
-        return reset(getDefaultAgentFormValues(defaultStatefulCodeEnvironment));
-      }
-
-      setCurrentAgentId(selectedId);
-      const agent = agentQuery.data;
-      if (!agent) {
-        console.warn('Agent not found');
+        reset(getDefaultAgentFormValues(defaultStatefulCodeEnvironment));
         return;
       }
 
-      resetAgentForm(agent);
+      // A freshly created Agent may not be present in the list query yet.
+      // Never treat a non-empty, temporarily missing id as "Create New",
+      // which would erase its form and clear the selected Agent.
+      if (!agentExists) {
+        return;
+      }
+
+      setCurrentAgentId(selectedId);
+      // A previous chat Agent's query may still be in cache while this id
+      // is loading. Only hydrate from the Agent that was actually selected.
+      if (agentQuery.data?.id === selectedId) {
+        resetAgentForm(agentQuery.data);
+      }
     },
     [
       agents,
@@ -283,10 +289,15 @@ function AgentSelect({
   useEffect(() => {
     // A previous Research Agent query may still settle after the user clicks
     // Use template. Do not let its response reset the blank/AI Image Creator form.
-    if (!activeMarketplaceDraft && agentQuery.data && agentQuery.isSuccess) {
+    if (
+      !activeMarketplaceDraft &&
+      selectedAgentId &&
+      agentQuery.data?.id === selectedAgentId &&
+      agentQuery.isSuccess
+    ) {
       resetAgentForm(agentQuery.data, true);
     }
-  }, [activeMarketplaceDraft, agentQuery.data, agentQuery.isSuccess, resetAgentForm]);
+  }, [activeMarketplaceDraft, selectedAgentId, agentQuery.data, agentQuery.isSuccess, resetAgentForm]);
 
   useEffect(() => {
     let timerId: NodeJS.Timeout | null = null;
@@ -295,7 +306,11 @@ function AgentSelect({
       return;
     }
 
-    if (!activeMarketplaceDraft && selectedAgentId != null && selectedAgentId !== '' && agents) {
+    // A just-created Agent can become selected before list/query invalidation
+    // finishes. Do not dispatch a synthetic dropdown selection until both
+    // sources confirm this exact id; the query hydration effect handles it.
+    const listed = agents?.some((agent) => agent.id === selectedAgentId);
+    if (!activeMarketplaceDraft && selectedAgentId && listed && agentQuery.data?.id === selectedAgentId) {
       timerId = setTimeout(() => {
         lastSelectedAgent.current = selectedAgentId;
         onSelect(selectedAgentId);
@@ -307,7 +322,7 @@ function AgentSelect({
         clearTimeout(timerId);
       }
     };
-  }, [selectedAgentId, agents, onSelect, activeMarketplaceDraft]);
+  }, [selectedAgentId, agents, agentQuery.data?.id, onSelect, activeMarketplaceDraft]);
 
   const createAgent = localize('com_ui_create_new_agent');
 
