@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Constants } from 'librechat-data-provider';
 import { ChevronDown, ChevronUp, Sparkles, X } from 'lucide-react';
 import { useFormContext, useWatch } from 'react-hook-form';
@@ -15,6 +16,9 @@ import MineResearchPilotTools from './MineResearchPilotTools';
 export default function MineAgentQuickStart() {
   const { control, getValues, setValue } = useFormContext<AgentForm>();
   const agentId = useWatch({ control, name: 'id' });
+  const [searchParams] = useSearchParams();
+  const requestedId = searchParams.get('mineAgentTemplate');
+  const requestedTemplate = MINE_AGENT_TEMPLATES.find((template) => template.id === requestedId);
   const [expanded, setExpanded] = useState(true);
   const [pending, setPending] = useState<MineAgentTemplate | null>(null);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
@@ -79,24 +83,29 @@ export default function MineAgentQuickStart() {
       {expanded && (
         <div className="mt-2">
           <p className="text-text-secondary mb-2 text-xs">
-            Pick a starting point, then customize it. Model, keys and tools stay unchanged until you explicitly add a tool.
+            Browse curated Agent Templates in the Agent Marketplace, then configure the selected
+            template here. Your model, keys, Tools and knowledge files stay under your control.
           </p>
-          <div className="flex gap-2 overflow-x-auto pb-1" aria-label="MINE Agent templates">
-            {MINE_AGENT_TEMPLATES.map((template) => (
+          {requestedTemplate ? (
+            <div className="border-border-light bg-surface-primary rounded-lg border p-2.5" role="group" aria-label="Selected Marketplace Agent template">
+              <p className="text-text-primary text-xs font-semibold">{requestedTemplate.name}</p>
+              <p className="text-text-secondary mt-1 text-xs">{requestedTemplate.description}</p>
               <button
-                key={template.id}
                 type="button"
-                className="border-border-light bg-surface-primary text-text-primary hover:bg-surface-hover focus-visible:ring-text-primary flex min-w-28 max-w-32 shrink-0 flex-col items-start gap-1 rounded-lg border px-2.5 py-2 text-left focus-visible:outline-none focus-visible:ring-2"
-                onClick={() => choose(template)}
-                aria-label={'Use ' + template.title + ' Agent template'}
+                className="bg-surface-tertiary text-text-primary hover:bg-surface-hover mt-2 rounded-md px-2.5 py-1.5 text-xs font-medium"
+                onClick={() => choose(requestedTemplate)}
               >
-                <span className="text-xs font-semibold">{template.title}</span>
-                <span className="text-text-secondary text-[11px] leading-4">
-                  {template.categoryLabel}
-                </span>
+                Apply Marketplace template
               </button>
-            ))}
-          </div>
+            </div>
+          ) : (
+            <Link
+              to="/agents/templates"
+              className="border-border-light bg-surface-primary text-text-primary hover:bg-surface-hover inline-flex items-center rounded-md border px-2.5 py-1.5 text-xs font-medium"
+            >
+              Browse Agent Marketplace templates
+            </Link>
+          )}
           {selectedTemplateId === 'research' && <MineResearchPilotTools />}
 
           {pending && (
