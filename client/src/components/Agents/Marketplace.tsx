@@ -13,6 +13,7 @@ import MineFilterToggle from './MineFilterToggle';
 import CategoryTabs from './CategoryTabs';
 import SearchBar from './SearchBar';
 import AgentGrid from './AgentGrid';
+import MineTemplateMarketplace from './MineTemplateMarketplace';
 
 interface AgentMarketplaceProps {
   className?: string;
@@ -33,6 +34,7 @@ const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ className = '' }) =
       : DEFAULT_SORT_OPTION;
   }, [searchParams]);
   const mine: 0 | 1 = searchParams.get('mine') === '1' ? 1 : 0;
+  const showingTemplates = category === 'templates';
 
   useDocumentTitle(`${localize('com_agents_marketplace')} | LibreChat`);
   useGetEndpointsQuery();
@@ -88,6 +90,7 @@ const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ className = '' }) =
   };
 
   const handleMineChange = (checked: boolean) => {
+    if (showingTemplates) return;
     const params = new URLSearchParams(searchParams);
     if (checked) {
       params.set('mine', '1');
@@ -146,18 +149,27 @@ const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ className = '' }) =
               <MarketplaceAdminSettings />
             </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 pb-3">
-              <div className="min-w-0 flex-1 basis-full lg:basis-0">
-                <CategoryTabs
+              <div className="flex min-w-0 flex-1 basis-full flex-wrap items-center gap-2 lg:basis-0">
+                <button
+                  type="button"
+                  onClick={() => navigate({ pathname: '/agents/templates', search: searchParams.toString() })}
+                  aria-label="Browse Agent Templates"
+                  aria-current={showingTemplates ? 'page' : undefined}
+                  className={`border-border-chrome inline-flex shrink-0 items-center rounded-full border px-3 py-2 text-xs font-medium ${showingTemplates ? 'bg-surface-active-alt text-text-primary' : 'bg-surface-secondary text-text-secondary hover:bg-surface-hover'}`}
+                >
+                  Templates
+                </button>
+                {!showingTemplates && <CategoryTabs
                   categories={categoriesQuery.data || []}
                   activeTab={activeCategory}
                   isLoading={categoriesQuery.isLoading}
                   onChange={handleTabChange}
-                />
+                />}
               </div>
-              <div className="ms-auto flex shrink-0 items-center gap-1.5">
+              {!showingTemplates && <div className="ms-auto flex shrink-0 items-center gap-1.5">
                 <MineFilterToggle checked={mine === 1} onCheckedChange={handleMineChange} />
                 <SortDropdown value={sort} onChange={handleSortChange} />
-              </div>
+              </div>}
             </div>
           </div>
           <div
@@ -170,13 +182,13 @@ const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ className = '' }) =
                 dialog and its return target, and the replacement grid starts with an empty
                 `previousScopeKeyRef`, so it reads that render as a first mount and leaves
                 focus on the document. */}
-            <AgentGrid
+            {showingTemplates ? <MineTemplateMarketplace searchQuery={searchQuery} /> : <AgentGrid
               category={activeCategory}
               searchQuery={searchQuery}
               scrollElementRef={scrollContainerRef}
               sort={sort}
               mine={mine}
-            />
+            />}
           </div>
         </main>
       </SidePanelGroup>
