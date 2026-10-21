@@ -1,7 +1,7 @@
 /** @jest-environment jsdom */
 import React from 'react';
 import { getDefaultStore } from 'jotai';
-import { mineTemplateHandoffAtom } from './mineTemplateHandoff';
+import { mineTemplateHandoffAtom, mineTemplateBuilderSessionAtom } from './mineTemplateHandoff';
 import { MINE_AGENT_TEMPLATES } from './mineAgentTemplates';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
@@ -68,7 +68,10 @@ const renderQuickStart = (initialEntry = '/c/new', props = {}) =>
   );
 
 describe('MINE Agent quick start via Marketplace', () => {
-  beforeEach(() => getDefaultStore().set(mineTemplateHandoffAtom, null));
+  beforeEach(() => {
+    getDefaultStore().set(mineTemplateHandoffAtom, null);
+    getDefaultStore().set(mineTemplateBuilderSessionAtom, null);
+  });
   it('displays Marketplace link rather than duplicate template cards', () => {
     renderQuickStart();
     expect(screen.getByRole('link', { name: 'Browse Agent Marketplace templates' })).toHaveAttribute(
@@ -129,6 +132,20 @@ describe('MINE Agent quick start via Marketplace', () => {
     });
     expect(screen.getByTestId('mine-image-studio-pilot')).toBeInTheDocument();
     expect(screen.getByText(/Setup needed for rendering: image generation tool/)).toBeInTheDocument();
+  });
+
+  it('shows an applied Image Creator as its own unsaved draft despite the old Chat Agent', () => {
+    const image = MINE_AGENT_TEMPLATES.find((template) => template.id === 'image-creator');
+    expect(image).toBeDefined();
+    getDefaultStore().set(mineTemplateBuilderSessionAtom, 'image-creator');
+    renderQuickStart('/c/new', {
+      initialName: image?.name,
+      initialInstructions: image?.instructions,
+    });
+    expect(screen.getByText(/AI Image Creator loaded into a NEW Agent draft/)).toBeInTheDocument();
+    expect(screen.getByText(/Chat on the right can still show your previous Agent/)).toBeInTheDocument();
+    expect(screen.getByTestId('mine-image-studio-pilot')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Apply Marketplace template' })).not.toBeInTheDocument();
   });
 
   it('keeps a Marketplace template choice available through confirmation and cancellation', () => {
