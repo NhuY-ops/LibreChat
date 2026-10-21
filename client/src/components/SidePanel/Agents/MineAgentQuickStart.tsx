@@ -36,7 +36,7 @@ export default function MineAgentQuickStart() {
   const activeTemplateId = builderSessionId ?? appliedTemplateId ?? selectedTemplateId;
   // Chat routing can strip the original URL query. Handoff state is the
   // primary pending selection, and the draft itself is the post-apply source.
-  const requestedId = handoffId ?? searchParams.get('mineAgentTemplate') ?? activeTemplateId;
+  const requestedId = handoffId ?? builderSessionId ?? searchParams.get('mineAgentTemplate') ?? activeTemplateId;
   const requestedTemplate = MINE_AGENT_TEMPLATES.find((template) => template.id === requestedId);
 
   if (agentId) {
