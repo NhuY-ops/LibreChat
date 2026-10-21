@@ -14,6 +14,7 @@ import Instructions from './Instructions';
 import FileContext from './FileContext';
 import AgentAvatar from './AgentAvatar';
 import MineAgentQuickStart from './MineAgentQuickStart';
+import MineResearchV1Upgrade from './MineResearchV1Upgrade';
 import MineAgentSetupGuide from './MineAgentSetupGuide';
 import Starters from './Starters';
 import { Panel } from '~/common';
@@ -161,6 +162,9 @@ export default function AgentConfig({
         promptStatus={instructionsPromptStatus}
         onRetryLoad={onRetryInstructionsPrompt}
       />
+
+      {/* Existing Research Analysts opt in; models, tools and files stay untouched. */}
+      {agent_id && <MineResearchV1Upgrade />}
 
       {/* TOOLS — unified built-ins / tools / actions / mcp / skills */}
       <ToolsSection agentId={agent_id} />
