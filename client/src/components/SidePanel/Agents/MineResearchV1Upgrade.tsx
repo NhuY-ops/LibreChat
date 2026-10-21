@@ -23,7 +23,14 @@ export default function MineResearchV1Upgrade() {
     setConfirming(false);
   }, [agentId]);
 
-  if (!agentId || isEphemeralAgent(agentId) || name?.trim() !== 'Research Analyst') {
+  // Existing users may have renamed the original pilot Agent to indicate V1.
+  // Recognize both established names without applying changes automatically.
+  const researchName = name?.trim();
+  if (
+    !agentId ||
+    isEphemeralAgent(agentId) ||
+    (researchName !== 'Research Analyst' && researchName !== 'Research Analyst V1')
+  ) {
     return null;
   }
 
