@@ -39,7 +39,7 @@ describe('MINE Marketplace template gallery', () => {
     renderGallery();
     fireEvent.click(screen.getAllByRole('button', { name: 'Preview' })[1]);
     expect(screen.getByRole('region', { name: 'Research Analyst template details' })).toBeInTheDocument();
-    expect(screen.getByText(/Tools require explicit permission/)).toBeInTheDocument();
+    expect(screen.getByText(/All Tools, provider keys and access permissions/)).toBeInTheDocument();
   });
 
   it('renders an expanded creative library with meaningful group filters', () => {
