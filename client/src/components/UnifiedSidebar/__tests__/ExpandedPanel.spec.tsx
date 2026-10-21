@@ -248,7 +248,8 @@ describe('ExpandedPanel', () => {
       renderPanel({ links: links(openMarketplace) });
       const builder = screen.getByTestId('nav-panel-agents');
       const marketplace = screen.getByTestId('nav-panel-agent-marketplace');
-      expect(builder.nextElementSibling).toBe(marketplace);
+      const panelButtons = screen.getAllByTestId(/^nav-panel-/);
+      expect(panelButtons.indexOf(marketplace)).toBe(panelButtons.indexOf(builder) + 1);
       fireEvent.click(marketplace);
       expect(openMarketplace).toHaveBeenCalledTimes(1);
       expect(getDefaultStore().get(activePanelAtom)).toBe(DEFAULT_PANEL);
