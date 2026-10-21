@@ -1,5 +1,5 @@
 import { Constants } from 'librechat-data-provider';
-import { MINE_AGENT_TEMPLATES } from './mineAgentTemplates';
+import { MINE_AGENT_TEMPLATES, MINE_RESEARCH_V1_INSTRUCTIONS } from './mineAgentTemplates';
 
 describe('MINE Agent starter templates', () => {
   it('ships distinct and complete Agent blueprints', () => {
@@ -29,4 +29,19 @@ describe('MINE Agent starter templates', () => {
       );
     }
   });
+
+  it('provides robust Research V1 instructions instead of unsupported study claims', () => {
+    const research = MINE_AGENT_TEMPLATES.find((template) => template.id === 'research');
+    expect(research?.instructions).toBe(MINE_RESEARCH_V1_INSTRUCTIONS);
+    expect(research?.instructions).toContain('sample size');
+    expect(research?.instructions).toContain('clinic-attending sample');
+    expect(research?.instructions).toContain('DOI/PMID');
+    expect(research?.instructions).toContain('search snippet');
+    expect(research?.instructions).toContain('Do not use cross-sectional associations');
+    expect(research?.instructions).toContain('Never fabricate citations');
+    expect(research?.instructions).toContain('If a tool is unavailable');
+    expect(research?.starters).toHaveLength(3);
+    expect(research?.starters[0]).toContain('research protocol');
+  });
+
 });
