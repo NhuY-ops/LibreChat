@@ -38,6 +38,31 @@ In **Agent Marketplace → Templates → AI Image Creator → Use template**:
 All copy and tool-add actions require explicit user interactions, and
 selecting a template alone never enables a tool or charges a provider.
 
+## Fix: AI Image Creator selection disappears on navigation
+
+The Chat router may normalize `/c/new?mineAgentTemplate=image-creator` to
+`/c/new` before the Agent Builder component renders. The earlier pilot read
+only the URL search parameter, so it could show a blank **Create New Agent**
+panel and an unrelated **Research Analyst V1** conversation still selected on
+the right. This did not indicate that the Image Creator was installed in the
+Research Agent or that its model/tools had changed.
+
+The Gallery now writes a temporary same-tab Jotai handoff atom **before**
+opening Agent Builder. The new-Agent editor reads that id even if the route
+strips the URL query. The id is consumed only after an explicit **Apply
+Marketplace template** (or **Replace draft**) action, which fills the unsaved
+form. After application, the studio helper can rediscover the template from
+its exact default instructions/name following a ModelPanel remount.
+
+**How to use:** Open Agent Marketplace → Templates → Images → AI Image Creator
+→ Use template. Close any open **Create New Agent** dropdown, find the
+**Start with an Agent template** box beneath the builder header, and click
+**Apply Marketplace template**. The new form should show **AI Image Creator**
+and below it **Image Studio V1 — Generate through your Agent**. It is *not*
+a separately saved Agent until you choose and save a model. The chat area
+on the right may still show the previously used Research Analyst; that
+is independent of the new-Agent builder draft.
+
 ## Limits and guarantees
 - **Integration-ready, not end-to-end verified on the user's Mac:** We cannot
   assert an image rendered until the tool is selected, provider access works,
