@@ -206,47 +206,44 @@ export default function MineTemplateMarketplace({ searchQuery = '' }: { searchQu
                     {selected?.id === template.id ? 'Hide details' : 'Preview'}
                   </button>
                 </div>
+                {selected?.id === template.id && (
+                  <div
+                    className="border-border-light bg-surface-primary mt-3 rounded-lg border p-3"
+                    role="region"
+                    aria-label={`${template.name} template details`}
+                  >
+                    <h4 className="text-text-primary text-sm font-semibold">{template.name} — overview</h4>
+                    <p className="text-text-secondary mt-1 text-sm">{template.description}</p>
+                    {template.workflow && (
+                      <>
+                        <p className="text-text-primary mt-3 text-xs font-semibold">Workflow</p>
+                        <ol className="text-text-secondary mt-1 list-inside list-decimal space-y-1 text-xs">
+                          {template.workflow.map((step) => <li key={step}>{step}</li>)}
+                        </ol>
+                      </>
+                    )}
+                    {template.requiredTool && (
+                      <p className="text-text-secondary mt-3 flex items-start gap-1.5 text-xs" role="note">
+                        <Plug className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+                        Real generated media requires a configured {template.requiredTool}; the template alone cannot render or export files.
+                      </p>
+                    )}
+                    <p className="text-text-primary mt-3 text-xs font-semibold">Suggested conversation starters</p>
+                    <ul className="text-text-secondary mt-1 list-inside list-disc space-y-1 text-xs">
+                      {template.starters.map((starter) => <li key={starter}>{starter}</li>)}
+                    </ul>
+                    <p className="text-text-secondary mt-3 text-xs">
+                      All Tools, provider keys and access permissions are optional and configured separately.
+                      This preview does not create or publish an Agent.
+                    </p>
+                  </div>
+                )}
               </article>
             );
           })}
         </div>
       )}
 
-      {selected && (
-        <div
-          className="border-border-light bg-surface-secondary mt-4 rounded-xl border p-4"
-          role="region"
-          aria-label={`${selected.name} template details`}
-        >
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-text-primary font-semibold">{selected.name} — overview</h3>
-            <span className="text-text-secondary text-xs">{selected.categoryLabel}</span>
-          </div>
-          <p className="text-text-secondary mt-2 text-sm">{selected.description}</p>
-          {selected.workflow && (
-            <>
-              <p className="text-text-primary mt-3 text-xs font-semibold">Workflow</p>
-              <ol className="text-text-secondary mt-2 list-inside list-decimal space-y-1.5 text-sm">
-                {selected.workflow.map((step) => <li key={step}>{step}</li>)}
-              </ol>
-            </>
-          )}
-          {selected.requiredTool && (
-            <p className="text-text-secondary mt-3 flex items-start gap-1.5 text-xs" role="note">
-              <Plug className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-              Real generated media requires a configured {selected.requiredTool}; the template alone cannot render or export files.
-            </p>
-          )}
-          <p className="text-text-primary mt-3 text-xs font-semibold">Suggested conversation starters</p>
-          <ul className="text-text-secondary mt-2 list-inside list-disc space-y-1 text-sm">
-            {selected.starters.map((starter) => <li key={starter}>{starter}</li>)}
-          </ul>
-          <p className="text-text-secondary mt-3 text-xs">
-            All Tools, provider keys and access permissions are optional and configured separately.
-            This preview does not create or publish an Agent.
-          </p>
-        </div>
-      )}
     </section>
   );
 }
