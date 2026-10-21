@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useAtom } from 'jotai';
+import { useAtom, useAtomValue } from 'jotai';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Constants } from 'librechat-data-provider';
 import { ChevronDown, ChevronUp, Sparkles, X } from 'lucide-react';
@@ -9,7 +9,7 @@ import { MINE_AGENT_TEMPLATES } from './mineAgentTemplates';
 import type { MineAgentTemplate } from './mineAgentTemplates';
 import MineResearchPilotTools from './MineResearchPilotTools';
 import MineImageStudioPilot from './MineImageStudioPilot';
-import { mineTemplateHandoffAtom } from './mineTemplateHandoff';
+import { mineTemplateHandoffAtom, mineTemplateBuilderSessionAtom } from './mineTemplateHandoff';
 
 /**
  * Starter templates for unsaved Agents only. Nothing executes or creates an
@@ -21,6 +21,7 @@ export default function MineAgentQuickStart() {
   const agentId = useWatch({ control, name: 'id' });
   const [searchParams] = useSearchParams();
   const [handoffId, setHandoffId] = useAtom(mineTemplateHandoffAtom);
+  const builderSessionId = useAtomValue(mineTemplateBuilderSessionAtom);
   const [expanded, setExpanded] = useState(true);
   const [pending, setPending] = useState<MineAgentTemplate | null>(null);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
@@ -32,7 +33,7 @@ export default function MineAgentQuickStart() {
   const appliedTemplateId = MINE_AGENT_TEMPLATES.find(
     (template) => template.name === formName && template.instructions === formInstructions,
   )?.id;
-  const activeTemplateId = appliedTemplateId ?? selectedTemplateId;
+  const activeTemplateId = builderSessionId ?? appliedTemplateId ?? selectedTemplateId;
   // Chat routing can strip the original URL query. Handoff state is the
   // primary pending selection, and the draft itself is the post-apply source.
   const requestedId = handoffId ?? searchParams.get('mineAgentTemplate') ?? activeTemplateId;
@@ -114,13 +115,20 @@ export default function MineAgentQuickStart() {
                   This blueprint only supplies instructions until a compatible Tool is configured.
                 </p>
               )}
-              <button
-                type="button"
-                className="bg-surface-tertiary text-text-primary hover:bg-surface-hover mt-2 rounded-md px-2.5 py-1.5 text-xs font-medium"
-                onClick={() => choose(requestedTemplate)}
-              >
-                Apply Marketplace template
-              </button>
+              {activeTemplateId === requestedTemplate.id ? (
+                <p className="text-text-primary mt-2 rounded-md bg-surface-tertiary px-2.5 py-2 text-xs font-medium" role="status">
+                  ✓ {requestedTemplate.name} loaded into a NEW Agent draft. Choose a model and configure Tools below.
+                  The Chat on the right can still show your previous Agent until you save this one and use it in Chat.
+                </p>
+              ) : (
+                <button
+                  type="button"
+                  className="bg-surface-tertiary text-text-primary hover:bg-surface-hover mt-2 rounded-md px-2.5 py-1.5 text-xs font-medium"
+                  onClick={() => choose(requestedTemplate)}
+                >
+                  Apply Marketplace template
+                </button>
+              )}
             </div>
           ) : (
             <Link
