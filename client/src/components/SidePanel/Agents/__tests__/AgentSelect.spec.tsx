@@ -1,4 +1,6 @@
 import React from 'react';
+import { getDefaultStore } from 'jotai';
+import { mineTemplateBuilderSessionAtom } from '../mineTemplateHandoff';
 import { useForm, FormProvider } from 'react-hook-form';
 import { render, waitFor } from '@testing-library/react';
 import type { UseMutationResult, QueryObserverResult } from '@tanstack/react-query';
@@ -71,6 +73,27 @@ const createAgent = (overrides: Partial<Agent> = {}): Agent =>
   }) as Agent;
 
 describe('AgentSelect resetAgentForm', () => {
+  beforeEach(() => getDefaultStore().set(mineTemplateBuilderSessionAtom, null));
+  it('does not restore a cached Research Agent over the Image Creator template draft', async () => {
+    getDefaultStore().set(mineTemplateBuilderSessionAtom, 'image-creator');
+    let methods: UseFormReturn<AgentForm> | undefined;
+    render(
+      <Harness
+        agent={createAgent({ name: 'Research Analyst V1', instructions: 'Old research setup' })}
+        defaultValues={{
+          name: 'AI Image Creator',
+          instructions: 'New image generation Agent instructions',
+          instructionsSource: 'inline',
+        }}
+        onMethods={(m) => (methods = m)}
+      />,
+    );
+
+    await waitFor(() => expect(methods?.getValues('name')).toBe('AI Image Creator'));
+    expect(methods?.getValues('instructions')).toBe('New image generation Agent instructions');
+    expect(methods?.getValues('instructionsSource')).toBe('inline');
+  });
+
   it('maps a linked agent to Prompt mode with the link copied verbatim', async () => {
     const link = {
       source: 'native' as const,
