@@ -28,12 +28,20 @@ The other Agent templates remain unchanged. Research V1 covers:
 - All model outputs still require human source verification for consequential
   medical or academic work.
 
-## Using it with a new Agent
-In the Agent editor, select **Research** from the starter templates. This
-fills the Research V1 instructions and 3 starters, preserving whichever model,
-provider, and tools are already chosen. Tool connections require explicit setup.
-Create the Agent using the ordinary flow, then attach knowledge files inside
-**Tools → File Search** (not File Context alone).
+## Using it with a new Agent from Agent Marketplace
+1. Open **Agent Marketplace → Templates** (`/agents/templates`).
+2. Preview Research Analyst or another curated blueprint, then choose **Use template**.
+   The app navigates to `/c/new?mineAgentTemplate=research`.
+3. Open the **Agents builder** panel if it is not already visible, then click
+   **Apply Marketplace template** in the new-Agent quick-start guide.
+4. Choose the model, inspect the populated inline instructions and starters,
+   opt in to Tools, and use the normal **Create** action. Template selection
+   does not create an Agent, connect a provider, or consume model credits.
+5. Attach knowledge files inside **Tools → File Search**, not File Context alone.
+
+The Marketplace template gallery contains *blueprints*, not published/shared
+Agent instances. The existing Marketplace published-Agent grid and its permissions
+remain separate; **Explore Agents** returns to the published-Agent list.
 
 ## Upgrading an existing Research Analyst (opt-in)
 1. Open **Agents → Research Analyst** in the builder.
@@ -62,6 +70,7 @@ cd ..
 npx jest client/src/components/SidePanel/Agents/mineAgentTemplates.test.ts \
   client/src/components/SidePanel/Agents/MineResearchV1Upgrade.test.tsx \
   client/src/components/SidePanel/Agents/MineAgentQuickStart.test.tsx \
+  client/src/components/Agents/tests/MineTemplateMarketplace.spec.tsx \
   --runInBand
 ```
 
