@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useAtom } from 'jotai';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Constants } from 'librechat-data-provider';
 import { ChevronDown, ChevronUp, Sparkles, X } from 'lucide-react';
@@ -8,6 +9,7 @@ import { MINE_AGENT_TEMPLATES } from './mineAgentTemplates';
 import type { MineAgentTemplate } from './mineAgentTemplates';
 import MineResearchPilotTools from './MineResearchPilotTools';
 import MineImageStudioPilot from './MineImageStudioPilot';
+import { mineTemplateHandoffAtom } from './mineTemplateHandoff';
 
 /**
  * Starter templates for unsaved Agents only. Nothing executes or creates an
@@ -18,11 +20,15 @@ export default function MineAgentQuickStart() {
   const { control, getValues, setValue } = useFormContext<AgentForm>();
   const agentId = useWatch({ control, name: 'id' });
   const [searchParams] = useSearchParams();
-  const requestedId = searchParams.get('mineAgentTemplate');
-  const requestedTemplate = MINE_AGENT_TEMPLATES.find((template) => template.id === requestedId);
+  const [handoffId, setHandoffId] = useAtom(mineTemplateHandoffAtom);
   const [expanded, setExpanded] = useState(true);
   const [pending, setPending] = useState<MineAgentTemplate | null>(null);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  // The chat route may remove `?mineAgentTemplate=...` as it opens /c/new.
+  // Prefer the Marketplace handoff while pending, then URL deep links, then the
+  // template the user has already applied in this draft.
+  const requestedId = handoffId ?? searchParams.get('mineAgentTemplate') ?? selectedTemplateId;
+  const requestedTemplate = MINE_AGENT_TEMPLATES.find((template) => template.id === requestedId);
 
   if (agentId) {
     return null;
@@ -41,6 +47,9 @@ export default function MineAgentQuickStart() {
     setValue('conversation_starter_draft', '', { shouldDirty: false });
     setSelectedTemplateId(template.id);
     setPending(null);
+    // Consume only after an explicit successful form fill. Until then a route
+    // change or Agent panel remount must not silently lose the selection.
+    setHandoffId(null);
   };
 
   const choose = (template: MineAgentTemplate) => {
