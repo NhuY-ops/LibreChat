@@ -24,10 +24,18 @@ export default function MineAgentQuickStart() {
   const [expanded, setExpanded] = useState(true);
   const [pending, setPending] = useState<MineAgentTemplate | null>(null);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
-  // The chat route may remove `?mineAgentTemplate=...` as it opens /c/new.
-  // Prefer the Marketplace handoff while pending, then URL deep links, then the
-  // template the user has already applied in this draft.
-  const requestedId = handoffId ?? searchParams.get('mineAgentTemplate') ?? selectedTemplateId;
+  const formName = useWatch({ control, name: 'name' });
+  const formInstructions = useWatch({ control, name: 'instructions' });
+  // AgentConfig unmounts when the user switches into the model/settings panel.
+  // Recover already-applied templates from the still-live React Hook Form,
+  // rather than losing the Image Studio setup when the user comes back.
+  const appliedTemplateId = MINE_AGENT_TEMPLATES.find(
+    (template) => template.name === formName && template.instructions === formInstructions,
+  )?.id;
+  const activeTemplateId = appliedTemplateId ?? selectedTemplateId;
+  // Chat routing can strip the original URL query. Handoff state is the
+  // primary pending selection, and the draft itself is the post-apply source.
+  const requestedId = handoffId ?? searchParams.get('mineAgentTemplate') ?? activeTemplateId;
   const requestedTemplate = MINE_AGENT_TEMPLATES.find((template) => template.id === requestedId);
 
   if (agentId) {
@@ -122,9 +130,9 @@ export default function MineAgentQuickStart() {
               Browse Agent Marketplace templates
             </Link>
           )}
-          {selectedTemplateId === 'research' && <MineResearchPilotTools />}
-          {selectedTemplateId === 'image-creator' && <MineImageStudioPilot />}
-          {selectedTemplateId && requestedTemplate?.id === selectedTemplateId && requestedTemplate.requiredTool && (
+          {activeTemplateId === 'research' && <MineResearchPilotTools />}
+          {activeTemplateId === 'image-creator' && <MineImageStudioPilot />}
+          {activeTemplateId && requestedTemplate?.id === activeTemplateId && requestedTemplate.requiredTool && (
             <p className="text-text-secondary mt-2 text-xs" role="note">
               Setup needed for rendering: {requestedTemplate.requiredTool}. Use Tools → Add to
               connect a compatible service yourself; saving this Agent does not provision it.
