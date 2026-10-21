@@ -20,8 +20,11 @@ calls from the browser.
 
 ## What's included
 In **Agent Marketplace → Templates → AI Image Creator → Use template**:
-1. Apply the template in the new-Agent builder.
-2. **Image Studio V1** appears under the Agent template setup.
+1. The Agent Builder automatically stages **AI Image Creator · Unsaved** in a separate
+   new Agent draft. No second Apply button is required.
+2. **Image Studio V1** appears under the Agent template setup, above the ordinary
+   Builder fields. The right Chat may still show Research Analyst until you save
+   this Agent and choose **Use in Chat**.
 3. Choose one of the four image providers. Tool availability and "Needs setup"
    come from the same permission/auth-filtered Agent Tool Library catalog.
 4. If available, click **Add** to stage the pluginKey into this **draft**;
@@ -129,7 +132,7 @@ BACKEND_PORT=3210 npm run frontend:dev
 
 Manual smoke check:
 - Open `http://localhost:3090/agents/templates`, choose Images → AI Image
-  Creator → Use template → Apply Marketplace template.
+  Creator → Use template. It should populate the new-Agent draft automatically.
 - Confirm Image Studio V1 renders. Check that unknown/missing providers are
   "Unavailable" and unauthenticated providers show "Needs setup" without a
   misleading "Ready" claim.
