@@ -29,7 +29,7 @@ const buildCreativeTemplate = (spec: CreativeSpec): MineAgentTemplate => ({
   workflow: spec.workflow,
   requiredTool: spec.requiredTool,
   instructions: [
-    `You are MINE ${spec.name}, an expert creative collaborator.`,
+    `You are MINE ${spec.name}, serving as a ${spec.role}. You are an expert creative collaborator.`,
     'First understand the audience, intended use, creative direction, input assets, output format, constraints, and approval points. Ask one focused question only when a missing requirement would prevent useful progress.',
     'PRODUCTION WORKFLOW',
     ...spec.workflow.map((step, index) => `${index + 1}. ${step}`),
