@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useAtomValue } from 'jotai';
 import { useRecoilValue } from 'recoil';
 import { AgentPanelProvider, useAgentPanelContext } from '~/Providers/AgentPanelContext';
@@ -23,15 +23,26 @@ export default function AgentPanelSwitch() {
 function AgentPanelSwitchWithContext({ agentId }: { agentId?: string | null }) {
   const { activePanel, setCurrentAgentId } = useAgentPanelContext();
   const templateBuilderSession = useAtomValue(mineTemplateBuilderSessionAtom);
+  const suspendedConversationAgentRef = useRef<string | null | undefined>(undefined);
 
   useEffect(() => {
-    // Agent Builder has its own pending, unsaved draft when a Marketplace
-    // blueprint is being configured. ChatRoute may still show the previously
-    // selected Research Analyst on the right: that must NEVER overwrite the
-    // draft or auto-select Research in the left-side Agent editor.
+    // The chat on the right can still show a Research Agent even though the
+    // user is building a separate new AI Image Creator on the left. Never let
+    // its agent_id hijack the form while a Marketplace draft is active.
     if (templateBuilderSession) {
+      suspendedConversationAgentRef.current = agentId ?? null;
       setCurrentAgentId(undefined);
       return;
+    }
+    // On successful Agent creation the Builder session is released while the
+    // old Chat still points to Research. Ignore that stale chat pick ONCE so
+    // it cannot immediately replace the newly saved Image Creator.
+    if (suspendedConversationAgentRef.current !== undefined) {
+      const suspended = suspendedConversationAgentRef.current;
+      suspendedConversationAgentRef.current = undefined;
+      if (suspended === (agentId ?? null)) {
+        return;
+      }
     }
     const agent_id = agentId ?? '';
     if (!isEphemeralAgent(agent_id)) {
