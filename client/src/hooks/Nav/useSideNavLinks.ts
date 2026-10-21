@@ -110,7 +110,7 @@ export default function useSideNavLinks({
       Boolean(endpointsConfig?.[EModelEndpoint.agents]) &&
       hasAccessToAgents &&
       hasAccessToCreateAgents &&
-      endpointsConfig[EModelEndpoint.agents].disableBuilder !== true;
+      endpointsConfig?.[EModelEndpoint.agents]?.disableBuilder !== true;
 
     if (hasAgentBuilder) {
       links.push({
