@@ -1,7 +1,11 @@
+import { MINE_CREATIVE_AGENT_TEMPLATES } from './mineCreativeAgentTemplates';
+
 /** MINE Agent Studio starter blueprints.
  * Applying one only populates the existing AgentForm fields — no extra API,
  * tool authorization, hidden model selection, or provider credential changes.
  */
+export type MineCreativeCollection = 'image' | 'video' | 'design' | 'audio' | 'content';
+
 export interface MineAgentTemplate {
   id: string;
   title: string;
@@ -10,6 +14,12 @@ export interface MineAgentTemplate {
   description: string;
   instructions: string;
   starters: string[];
+  /** Optional grouping used by the Creative Studio gallery. */
+  collection?: MineCreativeCollection;
+  /** Explicit external capability required for finished rendered outputs. */
+  requiredTool?: string;
+  /** Production steps shown in Preview; instructions still work without media APIs. */
+  workflow?: readonly string[];
 }
 
 /** Evidence-focused instructions for the Research V1 template and explicit opt-in upgrades. */
@@ -121,4 +131,5 @@ export const MINE_AGENT_TEMPLATES: readonly MineAgentTemplate[] = [
     ].join('\n'),
     starters: ['Explain this topic simply and quiz me', 'Make flashcards from my notes', 'Help create a realistic study plan'],
   },
+  ...MINE_CREATIVE_AGENT_TEMPLATES,
 ];
