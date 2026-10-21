@@ -73,10 +73,13 @@ describe('Research V1 upgrade for saved Agents', () => {
     expect(fields().instructionsPrompt).toBe('stored-prompt-id');
   });
 
-  it('does not offer the upgrade to new Agents or unrelated Agent names', () => {
-    const { rerender } = render(<Harness agentId="" />);
+  it('does not offer the upgrade to unsaved Agents', () => {
+    render(<Harness agentId="" />);
     expect(screen.queryByRole('button', { name: 'Review V1 upgrade' })).not.toBeInTheDocument();
-    rerender(<Harness agentId="saved-coder" agentName="Software Engineering Partner" />);
+  });
+
+  it('does not offer the upgrade to unrelated saved Agents', () => {
+    render(<Harness agentId="saved-coder" agentName="Software Engineering Partner" />);
     expect(screen.queryByRole('button', { name: 'Review V1 upgrade' })).not.toBeInTheDocument();
   });
 });
