@@ -2,6 +2,7 @@ import React from 'react';
 import { getDefaultStore } from 'jotai';
 import { EModelEndpoint } from 'librechat-data-provider';
 import { activePanelAtom, DEFAULT_PANEL } from '~/Providers';
+import { mineTemplateHandoffAtom } from '~/components/SidePanel/Agents/mineTemplateHandoff';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import MineTemplateMarketplace from '../MineTemplateMarketplace';
@@ -25,6 +26,7 @@ function renderGallery(searchQuery = '') {
 describe('MINE Marketplace template gallery', () => {
   beforeEach(() => {
     getDefaultStore().set(activePanelAtom, DEFAULT_PANEL);
+    getDefaultStore().set(mineTemplateHandoffAtom, null);
   });
   it('shows Research V1 and links to the existing Agent builder draft flow', () => {
     renderGallery();
@@ -33,6 +35,7 @@ describe('MINE Marketplace template gallery', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Configure Research Analyst template' }));
     expect(screen.getByTestId('destination')).toHaveTextContent('/c/new?mineAgentTemplate=research');
     expect(getDefaultStore().get(activePanelAtom)).toBe(EModelEndpoint.agents);
+    expect(getDefaultStore().get(mineTemplateHandoffAtom)).toBe('research');
   });
 
   it('allows previews without activating a tool or navigating', () => {
@@ -70,6 +73,7 @@ describe('MINE Marketplace template gallery', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Configure AI Video Creator template' }));
     expect(screen.getByTestId('destination')).toHaveTextContent('/c/new?mineAgentTemplate=video-creator');
     expect(getDefaultStore().get(activePanelAtom)).toBe(EModelEndpoint.agents);
+    expect(getDefaultStore().get(mineTemplateHandoffAtom)).toBe('video-creator');
   });
 
   it('filters templates and describes missing search matches', () => {
