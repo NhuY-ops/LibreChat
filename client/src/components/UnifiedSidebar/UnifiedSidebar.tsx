@@ -19,7 +19,6 @@ import {
 import { filesDialogTriggerAtom, showFilesDialogAtom } from '~/store/filesDialog';
 import { ChatContext, ChatFormProvider, ActivePanelProvider } from '~/Providers';
 import { MobileHeader, MobileBottomBar, MobileShortcutTargets } from './mobile';
-import AgentMarketplaceButton from '~/components/Nav/AgentMarketplaceButton';
 import { MyFilesModal } from '~/components/Chat/Input/Files/MyFilesModal';
 import useUnifiedSidebarLinks from '~/hooks/Nav/useUnifiedSidebarLinks';
 import useSidebarToggle from '~/hooks/Nav/useSidebarToggle';
@@ -75,6 +74,7 @@ function UnifiedSidebar({
 
   const links = useUnifiedSidebarLinks();
   const isInsightsRoute = location.pathname.startsWith('/insights');
+  const isMarketplaceRoute = location.pathname.startsWith('/agents');
   const panelExpanded = expanded && !isInsightsRoute;
 
   /** The aside's max width is a viewport percentage, so the announced range has to track
@@ -103,6 +103,7 @@ function UnifiedSidebar({
     setSidebarOpen(true);
   }, [setSidebarOpen]);
 
+  // Builder/Chat panels need a conversation route when leaving standalone pages.
   const handleLeaveInsights = useCallback(() => {
     navigate('/c/new');
   }, [navigate]);
@@ -251,15 +252,8 @@ function UnifiedSidebar({
             onNewChat={handleCollapse}
             switchToHistory={switchToHistory}
             onLeaveInsights={handleLeaveInsights}
-            routeActiveId={isInsightsRoute ? 'insights' : undefined}
+            routeActiveId={isInsightsRoute ? 'insights' : isMarketplaceRoute ? 'agent-marketplace' : undefined}
           />
-          {/* Above the panel rather than inside it: the marketplace is a
-              destination like the panels themselves, not a row of whichever
-              list happens to be showing, so it stays put while they change and
-              does not scroll away with the chats. */}
-          <div className="shrink-0 px-3 pt-2 empty:hidden">
-            <AgentMarketplaceButton layout="row" onNavigate={handleCollapse} />
-          </div>
           <nav id="chat-history-nav" className="bg-surface-sidebar min-h-0 flex-1 overflow-hidden">
             <SidePanelNav links={links} />
           </nav>
