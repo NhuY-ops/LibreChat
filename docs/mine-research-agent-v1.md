@@ -29,7 +29,9 @@ The other Agent templates remain unchanged. Research V1 covers:
   medical or academic work.
 
 ## Using it with a new Agent from Agent Marketplace
-1. Open **Agent Marketplace → Templates** (`/agents/templates`).
+1. In the left navigation rail, select **Agent Marketplace** directly below **Agent Builder**.
+   It opens the **Templates** page (`/agents/templates`). The former standalone
+   Marketplace shortcut above the rail divider was moved to this location.
 2. Preview Research Analyst or another curated blueprint, then choose **Use template**.
    The app navigates to `/c/new?mineAgentTemplate=research`.
 3. Open the **Agents builder** panel if it is not already visible, then click
@@ -57,6 +59,31 @@ remain separate; **Explore Agents** returns to the published-Agent list.
 
 Existing instructions are replaced only after confirmation. If the previous
 customization matters, copy it elsewhere before confirming.
+
+## Running the updated UI while Docker serves an older frontend
+The local source checkout at `~/mine-ai` is not the same deployment as the
+Docker Compose app served on port **3210** from
+`~/Developer/MINE-OSS-Playground/config/librechat` (the user's known setup).
+A successful `git pull` or `npm run typecheck` only updates/validates source.
+
+For a non-destructive development preview, keep the API container on port 3210,
+open a separate Terminal, and run:
+
+```bash
+cd ~/mine-ai
+git pull --ff-only origin mine-development
+BACKEND_PORT=3210 npm run frontend:dev
+```
+
+Then use **http://localhost:3090** for the source-code UI. Vite's dev proxy
+uses `BACKEND_PORT` to forward `/api` and `/oauth` to the existing Docker
+backend. Do not browse the older port 3210 for unbuilt frontend changes.
+If Vite selects another port because 3090 is busy, use the port printed by Vite.
+This route does not rebuild or restart RAG, Postgres, or the API containers.
+
+Before claiming the full Docker UI on 3210 is updated, inspect its image/bind
+mounts and plan a deployment of the compiled app to that runtime; do not
+blindly replace the container with a registry image or call `down -v`.
 
 ## Local verification
 After pulling `mine-development`, run:
