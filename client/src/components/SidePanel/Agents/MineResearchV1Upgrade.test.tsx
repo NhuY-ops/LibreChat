@@ -78,6 +78,11 @@ describe('Research V1 upgrade for saved Agents', () => {
     expect(screen.queryByRole('button', { name: 'Review V1 upgrade' })).not.toBeInTheDocument();
   });
 
+  it('offers the upgrade to the pilot Agent renamed Research Analyst V1', () => {
+    render(<Harness agentName="Research Analyst V1" />);
+    expect(screen.getByRole('button', { name: 'Review V1 upgrade' })).toBeInTheDocument();
+  });
+
   it('does not offer the upgrade to unrelated saved Agents', () => {
     render(<Harness agentId="saved-coder" agentName="Software Engineering Partner" />);
     expect(screen.queryByRole('button', { name: 'Review V1 upgrade' })).not.toBeInTheDocument();
