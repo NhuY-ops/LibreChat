@@ -260,7 +260,7 @@ function UnifiedSidebar({
           <MobileShortcutTargets
             links={links}
             onLeaveInsights={handleLeaveInsights}
-            routeActiveId={isInsightsRoute ? 'insights' : undefined}
+            routeActiveId={isInsightsRoute ? 'insights' : isMarketplaceRoute ? 'agent-marketplace' : undefined}
           />
           <MobileBottomBar links={links} />
         </ActivePanelProvider>
