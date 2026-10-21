@@ -81,6 +81,18 @@ describe('MINE Agent quick start via Marketplace', () => {
     expect(values.model).toBe('test-model');
   });
 
+  it('warns that Creative Studio templates need media tools and does not change the model', () => {
+    renderQuickStart('/c/new?mineAgentTemplate=image-creator');
+    expect(screen.getByText(/Real media output needs a connected image generation tool/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Apply Marketplace template' }));
+    const values = getValues();
+    expect(values.name).toBe('AI Image Creator');
+    expect(values.instructions).toContain('Without it, provide');
+    expect(values.provider).toBe('openai');
+    expect(values.model).toBe('test-model');
+    expect(screen.getByText(/Setup needed for rendering: image generation tool/)).toBeInTheDocument();
+  });
+
   it('asks before replacing previously entered Agent content', () => {
     renderQuickStart('/c/new?mineAgentTemplate=marketing', { initialName: 'My unfinished draft' });
     fireEvent.click(screen.getByRole('button', { name: 'Apply Marketplace template' }));
