@@ -32,6 +32,9 @@ The other Agent templates remain unchanged. Research V1 covers:
 1. In the left navigation rail, select **Agent Marketplace** directly below **Agent Builder**.
    It opens the **Templates** page (`/agents/templates`). The former standalone
    Marketplace shortcut above the rail divider was moved to this location.
+   Curated Templates follow **Agents USE + CREATE** access, rather than needing
+   the separate **Marketplace USE** permission. Viewing shared/published Agents
+   in Explore Agents still requires Marketplace USE.
 2. Preview Research Analyst or another curated blueprint, then choose **Use template**.
    The app navigates to `/c/new?mineAgentTemplate=research`.
 3. Open the **Agents builder** panel if it is not already visible, then click
