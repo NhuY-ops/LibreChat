@@ -13,6 +13,10 @@ jest.mock('./MineResearchPilotTools', () => ({
   __esModule: true,
   default: () => null,
 }));
+jest.mock('./MineImageStudioPilot', () => ({
+  __esModule: true,
+  default: () => <div data-testid="mine-image-studio-pilot" />,
+}));
 
 function AgentFormHarness({
   initialName = '',
@@ -91,6 +95,7 @@ describe('MINE Agent quick start via Marketplace', () => {
     expect(values.provider).toBe('openai');
     expect(values.model).toBe('test-model');
     expect(screen.getByText(/Setup needed for rendering: image generation tool/)).toBeInTheDocument();
+    expect(screen.getByTestId('mine-image-studio-pilot')).toBeInTheDocument();
   });
 
   it('asks before replacing previously entered Agent content', () => {
