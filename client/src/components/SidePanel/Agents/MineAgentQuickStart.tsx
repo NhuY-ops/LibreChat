@@ -7,6 +7,7 @@ import type { AgentForm } from '~/common';
 import { MINE_AGENT_TEMPLATES } from './mineAgentTemplates';
 import type { MineAgentTemplate } from './mineAgentTemplates';
 import MineResearchPilotTools from './MineResearchPilotTools';
+import MineImageStudioPilot from './MineImageStudioPilot';
 
 /**
  * Starter templates for unsaved Agents only. Nothing executes or creates an
@@ -113,6 +114,7 @@ export default function MineAgentQuickStart() {
             </Link>
           )}
           {selectedTemplateId === 'research' && <MineResearchPilotTools />}
+          {selectedTemplateId === 'image-creator' && <MineImageStudioPilot />}
           {selectedTemplateId && requestedTemplate?.id === selectedTemplateId && requestedTemplate.requiredTool && (
             <p className="text-text-secondary mt-2 text-xs" role="note">
               Setup needed for rendering: {requestedTemplate.requiredTool}. Use Tools → Add to
