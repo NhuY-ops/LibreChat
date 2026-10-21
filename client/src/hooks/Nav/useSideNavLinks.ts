@@ -106,12 +106,13 @@ export default function useSideNavLinks({
   const Links = useMemo(() => {
     const links: NavLink[] = [];
 
-    if (
-      endpointsConfig?.[EModelEndpoint.agents] &&
+    const hasAgentBuilder =
+      Boolean(endpointsConfig?.[EModelEndpoint.agents]) &&
       hasAccessToAgents &&
       hasAccessToCreateAgents &&
-      endpointsConfig[EModelEndpoint.agents].disableBuilder !== true
-    ) {
+      endpointsConfig[EModelEndpoint.agents].disableBuilder !== true;
+
+    if (hasAgentBuilder) {
       links.push({
         title: 'com_sidepanel_agent_builder',
         label: '',
@@ -121,16 +122,17 @@ export default function useSideNavLinks({
       });
     }
 
-    // Keep Agent Marketplace immediately below Agent Builder in the sidebar.
-    // It is a full-page destination, not an additional Agent editor panel.
-    // Honor the same auth/permission gate as the former top-of-rail button.
-    if (showMarketplace) {
+    // The built-in Template Gallery is part of Agent creation, so it should
+    // remain reachable whenever Agent Builder is available. Publishing and
+    // exploring shared Agents retain their independent Marketplace USE gate.
+    // Keep this link directly beneath Agent Builder in both desktop/mobile nav.
+    if (hasAgentBuilder || showMarketplace) {
       links.push({
         title: 'com_agents_marketplace',
         label: '',
         icon: LayoutGrid,
         id: 'agent-marketplace',
-        onClick: () => navigate('/agents/templates'),
+        onClick: () => navigate(hasAgentBuilder ? '/agents/templates' : '/agents'),
       });
     }
 
