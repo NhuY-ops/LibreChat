@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useRef } from 'react';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { EarthIcon } from 'lucide-react';
 import { ControlCombobox } from '@librechat/client';
 import { useFormContext, Controller } from 'react-hook-form';
@@ -14,6 +15,7 @@ import { cn, createProviderOption, processAgentOption, getDefaultAgentFormValues
 import { useListAgentsQuery, useGetStartupConfig } from '~/data-provider';
 import { useLocalize, useAgentDefaultPermissionLevel } from '~/hooks';
 import { mergeDirtyToolsWithServerActions } from './agentTools';
+import { mineTemplateBuilderSessionAtom, mineTemplateHandoffAtom } from './mineTemplateHandoff';
 
 const keys = new Set(Object.keys(defaultAgentFormValues));
 
@@ -42,6 +44,9 @@ function AgentSelect({
   instructionsPromptReady?: boolean;
 }) {
   const localize = useLocalize();
+  const activeMarketplaceDraft = useAtomValue(mineTemplateBuilderSessionAtom);
+  const clearMarketplaceDraft = useSetAtom(mineTemplateBuilderSessionAtom);
+  const clearMarketplaceHandoff = useSetAtom(mineTemplateHandoffAtom);
   const lastSelectedAgent = useRef<string | null>(null);
   const {
     control,
@@ -238,6 +243,10 @@ function AgentSelect({
 
   const onSelect = useCallback(
     (selectedId: string) => {
+      // Explicitly switching Agents or selecting Create New ends the temporary
+      // Marketplace draft isolation. No persisted Agent is modified.
+      clearMarketplaceDraft(null);
+      clearMarketplaceHandoff(null);
       const agentExists = !!(selectedId
         ? (agents ?? []).find((agent) => agent.id === selectedId)
         : undefined);
@@ -265,14 +274,18 @@ function AgentSelect({
       resetAgentForm,
       reset,
       defaultStatefulCodeEnvironment,
+      clearMarketplaceDraft,
+      clearMarketplaceHandoff,
     ],
   );
 
   useEffect(() => {
-    if (agentQuery.data && agentQuery.isSuccess) {
+    // A previous Research Agent query may still settle after the user clicks
+    // Use template. Do not let its response reset the blank/AI Image Creator form.
+    if (!activeMarketplaceDraft && agentQuery.data && agentQuery.isSuccess) {
       resetAgentForm(agentQuery.data, true);
     }
-  }, [agentQuery.data, agentQuery.isSuccess, resetAgentForm]);
+  }, [activeMarketplaceDraft, agentQuery.data, agentQuery.isSuccess, resetAgentForm]);
 
   useEffect(() => {
     let timerId: NodeJS.Timeout | null = null;
@@ -281,7 +294,7 @@ function AgentSelect({
       return;
     }
 
-    if (selectedAgentId != null && selectedAgentId !== '' && agents) {
+    if (!activeMarketplaceDraft && selectedAgentId != null && selectedAgentId !== '' && agents) {
       timerId = setTimeout(() => {
         lastSelectedAgent.current = selectedAgentId;
         onSelect(selectedAgentId);
@@ -293,7 +306,7 @@ function AgentSelect({
         clearTimeout(timerId);
       }
     };
-  }, [selectedAgentId, agents, onSelect]);
+  }, [selectedAgentId, agents, onSelect, activeMarketplaceDraft]);
 
   const createAgent = localize('com_ui_create_new_agent');
 
