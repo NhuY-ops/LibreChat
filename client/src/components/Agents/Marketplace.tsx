@@ -150,6 +150,16 @@ const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ className = '' }) =
             </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 pb-3">
               <div className="flex min-w-0 flex-1 basis-full flex-wrap items-center gap-2 lg:basis-0">
+                {showingTemplates && (
+                  <button
+                    type="button"
+                    aria-label="Explore published Agents"
+                    onClick={() => navigate({ pathname: '/agents/all', search: searchParams.toString() })}
+                    className="border-border-chrome bg-surface-secondary text-text-secondary hover:bg-surface-hover inline-flex shrink-0 items-center rounded-full border px-3 py-2 text-xs font-medium"
+                  >
+                    Explore Agents
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => navigate({ pathname: '/agents/templates', search: searchParams.toString() })}
