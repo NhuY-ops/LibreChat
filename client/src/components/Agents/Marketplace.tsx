@@ -115,15 +115,27 @@ const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ className = '' }) =
     permissionType: PermissionTypes.MARKETPLACE,
     permission: Permissions.USE,
   });
+  const canUseAgents = useHasAccess({
+    permissionType: PermissionTypes.AGENTS,
+    permission: Permissions.USE,
+  });
+  const canCreateAgents = useHasAccess({
+    permissionType: PermissionTypes.AGENTS,
+    permission: Permissions.CREATE,
+  });
+  // Curated, client-side templates are available to Agent creators without
+  // granting access to the server-backed Marketplace or shared Agent records.
+  const canUseTemplates = canUseAgents && canCreateAgents;
+  const canViewRoute = showingTemplates ? canUseTemplates : hasAccessToMarketplace;
   useEffect(() => {
-    if (hasAccessToMarketplace) {
+    if (canViewRoute) {
       return;
     }
     const timeoutId = setTimeout(() => navigate('/c/new'), 1000);
     return () => clearTimeout(timeoutId);
-  }, [hasAccessToMarketplace, navigate]);
+  }, [canViewRoute, navigate]);
 
-  if (!hasAccessToMarketplace) {
+  if (!canViewRoute) {
     return null;
   }
 
@@ -146,11 +158,11 @@ const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ className = '' }) =
             <div className="flex items-center gap-2 p-3">
               {isSmallScreen && <OpenSidebar className="size-9 shrink-0 rounded-lg" />}
               <SearchBar value={searchQuery} onSearch={handleSearch} className="min-w-0 flex-1" />
-              <MarketplaceAdminSettings />
+              {!showingTemplates && <MarketplaceAdminSettings />}
             </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 pb-3">
               <div className="flex min-w-0 flex-1 basis-full flex-wrap items-center gap-2 lg:basis-0">
-                {showingTemplates && (
+                {showingTemplates && hasAccessToMarketplace && (
                   <button
                     type="button"
                     aria-label="Explore published Agents"
@@ -160,7 +172,7 @@ const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ className = '' }) =
                     Explore Agents
                   </button>
                 )}
-                <button
+                {canUseTemplates && <button
                   type="button"
                   onClick={() => navigate({ pathname: '/agents/templates', search: searchParams.toString() })}
                   aria-label="Browse Agent Templates"
@@ -168,7 +180,7 @@ const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ className = '' }) =
                   className={`border-border-chrome inline-flex shrink-0 items-center rounded-full border px-3 py-2 text-xs font-medium ${showingTemplates ? 'bg-surface-active-alt text-text-primary' : 'bg-surface-secondary text-text-secondary hover:bg-surface-hover'}`}
                 >
                   Templates
-                </button>
+                </button>}
                 {!showingTemplates && <CategoryTabs
                   categories={categoriesQuery.data || []}
                   activeTab={activeCategory}
