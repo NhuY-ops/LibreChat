@@ -2,6 +2,7 @@
 import React from 'react';
 import { getDefaultStore } from 'jotai';
 import { mineTemplateHandoffAtom } from './mineTemplateHandoff';
+import { MINE_AGENT_TEMPLATES } from './mineAgentTemplates';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { FormProvider, useForm, useWatch } from 'react-hook-form';
@@ -22,9 +23,11 @@ jest.mock('./MineImageStudioPilot', () => ({
 
 function AgentFormHarness({
   initialName = '',
+  initialInstructions = '',
   agentId = '',
 }: {
   initialName?: string;
+  initialInstructions?: string;
   agentId?: string;
 }) {
   const methods = useForm<AgentForm>({
@@ -33,7 +36,7 @@ function AgentFormHarness({
       name: initialName,
       description: '',
       instructionsSource: 'inline',
-      instructions: '',
+      instructions: initialInstructions,
       instructionsPrompt: null,
       conversation_starters: [],
       conversation_starter_draft: '',
@@ -113,6 +116,19 @@ describe('MINE Agent quick start via Marketplace', () => {
     expect(getValues().name).toBe('AI Image Creator');
     expect(screen.getByTestId('mine-image-studio-pilot')).toBeInTheDocument();
     expect(getDefaultStore().get(mineTemplateHandoffAtom)).toBeNull();
+  });
+
+  it('keeps Image Studio visible after the Builder panel remounts for model selection', () => {
+    const image = MINE_AGENT_TEMPLATES.find((template) => template.id === 'image-creator');
+    expect(image).toBeDefined();
+    // A fresh render without URL or pending atom simulates returning from
+    // ModelPanel: the parent React Hook Form retained the applied fields.
+    renderQuickStart('/c/new', {
+      initialName: image?.name,
+      initialInstructions: image?.instructions,
+    });
+    expect(screen.getByTestId('mine-image-studio-pilot')).toBeInTheDocument();
+    expect(screen.getByText(/Setup needed for rendering: image generation tool/)).toBeInTheDocument();
   });
 
   it('keeps a Marketplace template choice available through confirmation and cancellation', () => {
