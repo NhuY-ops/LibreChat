@@ -39,6 +39,8 @@ const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ className = '' }) =
   useDocumentTitle(`${localize('com_agents_marketplace')} | LibreChat`);
   useGetEndpointsQuery();
   const categoriesQuery = useGetAgentCategoriesQuery({
+    // Curated Templates need no server-side Marketplace category query.
+    enabled: !showingTemplates,
     staleTime: 1000 * 60 * 15,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
