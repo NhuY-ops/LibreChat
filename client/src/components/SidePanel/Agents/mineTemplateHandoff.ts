@@ -8,7 +8,11 @@ import { atom } from 'jotai';
  * browser tab's in-memory state rather than assuming location.search survives.
  *
  * Never store API credentials, draft contents or Agent resources here.
- * This only carries the immutable id of a built-in template and is consumed
- * when the user explicitly applies it in the new-Agent editor.
+ * The handoff is consumed after the builder initializes a new draft. The
+ * Builder session remains set while that draft is being configured, to stop
+ * the still-selected Chat Agent from hijacking the Agent Builder on re-render.
  */
 export const mineTemplateHandoffAtom = atom<string | null>(null);
+
+/** Keeps the new-Agent Builder independent of the previous Chat Agent. */
+export const mineTemplateBuilderSessionAtom = atom<string | null>(null);
