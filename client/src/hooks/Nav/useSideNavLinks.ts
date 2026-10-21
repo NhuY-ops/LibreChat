@@ -1,7 +1,9 @@
 import { useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { MCPIcon, OpenAIMinimalIcon } from '@librechat/client';
 import {
   Bot,
+  LayoutGrid,
   Brain,
   Bookmark,
   NotebookPen,
@@ -25,6 +27,7 @@ import {
   useMCPServerManager,
   useGetAgentsConfig,
   useHasAccess,
+  useShowMarketplace,
 } from '~/hooks';
 import MCPBuilderPanel from '~/components/SidePanel/MCPBuilder/MCPBuilderPanel';
 import AgentPanelSwitch from '~/components/SidePanel/Agents/AgentPanelSwitch';
@@ -53,6 +56,8 @@ export default function useSideNavLinks({
   endpointsConfig: TEndpointsConfig;
   includeHidePanel?: boolean;
 }) {
+  const navigate = useNavigate();
+  const showMarketplace = useShowMarketplace();
   const hasAccessToPrompts = useHasAccess({
     permissionType: PermissionTypes.PROMPTS,
     permission: Permissions.USE,
@@ -113,6 +118,19 @@ export default function useSideNavLinks({
         icon: Bot,
         id: EModelEndpoint.agents,
         Component: AgentPanelSwitch,
+      });
+    }
+
+    // Keep Agent Marketplace immediately below Agent Builder in the sidebar.
+    // It is a full-page destination, not an additional Agent editor panel.
+    // Honor the same auth/permission gate as the former top-of-rail button.
+    if (showMarketplace) {
+      links.push({
+        title: 'com_agents_marketplace',
+        label: '',
+        icon: LayoutGrid,
+        id: 'agent-marketplace',
+        onClick: () => navigate('/agents/templates'),
       });
     }
 
@@ -237,6 +255,8 @@ export default function useSideNavLinks({
   }, [
     endpoint,
     endpointsConfig,
+    navigate,
+    showMarketplace,
     keyProvided,
     hasAccessToAgents,
     hasAccessToCreateAgents,
