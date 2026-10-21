@@ -1,5 +1,7 @@
 /** @jest-environment jsdom */
 import React from 'react';
+import { getDefaultStore } from 'jotai';
+import { mineTemplateHandoffAtom } from './mineTemplateHandoff';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { FormProvider, useForm, useWatch } from 'react-hook-form';
@@ -63,6 +65,7 @@ const renderQuickStart = (initialEntry = '/c/new', props = {}) =>
   );
 
 describe('MINE Agent quick start via Marketplace', () => {
+  beforeEach(() => getDefaultStore().set(mineTemplateHandoffAtom, null));
   it('displays Marketplace link rather than duplicate template cards', () => {
     renderQuickStart();
     expect(screen.getByRole('link', { name: 'Browse Agent Marketplace templates' })).toHaveAttribute(
@@ -96,6 +99,33 @@ describe('MINE Agent quick start via Marketplace', () => {
     expect(values.model).toBe('test-model');
     expect(screen.getByText(/Setup needed for rendering: image generation tool/)).toBeInTheDocument();
     expect(screen.getByTestId('mine-image-studio-pilot')).toBeInTheDocument();
+  });
+
+  it('recovers AI Image Creator selection when Chat removes Marketplace query parameters', () => {
+    // Reproduces the Mac screenshot: /c/new is visible but the search parameter
+    // from /agents/templates disappeared before the Builder rendered.
+    getDefaultStore().set(mineTemplateHandoffAtom, 'image-creator');
+    renderQuickStart('/c/new');
+    expect(screen.getByText('AI Image Creator')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Apply Marketplace template' })).toBeInTheDocument();
+    expect(getValues().name).toBe('');
+    fireEvent.click(screen.getByRole('button', { name: 'Apply Marketplace template' }));
+    expect(getValues().name).toBe('AI Image Creator');
+    expect(screen.getByTestId('mine-image-studio-pilot')).toBeInTheDocument();
+    expect(getDefaultStore().get(mineTemplateHandoffAtom)).toBeNull();
+  });
+
+  it('keeps a Marketplace template choice available through confirmation and cancellation', () => {
+    getDefaultStore().set(mineTemplateHandoffAtom, 'image-creator');
+    renderQuickStart('/c/new', { initialName: 'Unsaved creative draft' });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply Marketplace template' }));
+    expect(getDefaultStore().get(mineTemplateHandoffAtom)).toBe('image-creator');
+    fireEvent.click(screen.getByRole('button', { name: 'Keep my work' }));
+    expect(getDefaultStore().get(mineTemplateHandoffAtom)).toBe('image-creator');
+    fireEvent.click(screen.getByRole('button', { name: 'Apply Marketplace template' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Replace draft' }));
+    expect(getValues().name).toBe('AI Image Creator');
+    expect(getDefaultStore().get(mineTemplateHandoffAtom)).toBeNull();
   });
 
   it('asks before replacing previously entered Agent content', () => {
