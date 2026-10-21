@@ -1,5 +1,6 @@
 import React, { useMemo, useCallback, useEffect, useRef, useState } from 'react';
 import { Plus } from 'lucide-react';
+import { useAtom, useSetAtom } from 'jotai';
 import isEqual from 'lodash/isEqual';
 import { Button, useToastContext } from '@librechat/client';
 import { useWatch, useForm, FormProvider } from 'react-hook-form';
@@ -52,6 +53,8 @@ import AgentConfig from './AgentConfig';
 import AgentSelect from './AgentSelect';
 import AgentFooter from './AgentFooter';
 import ModelPanel from './ModelPanel';
+import { MINE_AGENT_TEMPLATES } from './mineAgentTemplates';
+import { mineTemplateHandoffAtom, mineTemplateBuilderSessionAtom } from './mineTemplateHandoff';
 
 /* Helpers */
 function getUpdateToastMessage(
@@ -475,6 +478,8 @@ export default function AgentPanel() {
     setCurrentAgentId,
     agent_id: current_agent_id,
   } = useAgentPanelContext();
+  const [pendingMarketplaceTemplate, setPendingMarketplaceTemplate] = useAtom(mineTemplateHandoffAtom);
+  const setTemplateBuilderSession = useSetAtom(mineTemplateBuilderSessionAtom);
   const defaultStatefulCodeEnvironment =
     resolveStatefulCodeEnvironment(
       user?.personalization?.statefulCodeEnvironment ?? 'user',
@@ -538,6 +543,46 @@ export default function AgentPanel() {
     resetField,
     formState: { dirtyFields },
   } = methods;
+  /** Clicking Marketplace → Use template means start a NEW Agent draft.
+   * ChatRoute retains the previous Chat's agent_id until the user starts a
+   * conversation with the newly created Agent. Populate the separate Builder
+   * form here in one reset, rather than relying on a query string that routing
+   * may strip or on a QuickStart child that only mounts for blank Agent forms.
+   * No persisted Agent is updated by this operation.
+   */
+  useEffect(() => {
+    if (!pendingMarketplaceTemplate) {
+      return;
+    }
+    const template = MINE_AGENT_TEMPLATES.find((item) => item.id === pendingMarketplaceTemplate);
+    if (!template) {
+      setPendingMarketplaceTemplate(null);
+      setTemplateBuilderSession(null);
+      return;
+    }
+    reset({
+      ...getDefaultAgentFormValues(defaultStatefulCodeEnvironment),
+      name: template.name,
+      description: template.description,
+      instructionsSource: 'inline',
+      instructionsPrompt: null,
+      instructions: template.instructions,
+      conversation_starters: template.starters.slice(0, 3),
+      conversation_starter_draft: '',
+    });
+    setCurrentAgentId(undefined);
+    setActivePanel(Panel.builder);
+    setPendingMarketplaceTemplate(null);
+  }, [
+    pendingMarketplaceTemplate,
+    defaultStatefulCodeEnvironment,
+    reset,
+    setActivePanel,
+    setCurrentAgentId,
+    setPendingMarketplaceTemplate,
+    setTemplateBuilderSession,
+  ]);
+
   const submittedStartersRef = useRef<SubmittedStarters | null>(null);
   const submittedInstructionsRef = useRef<{
     agentId: string;
@@ -813,6 +858,9 @@ export default function AgentPanel() {
       syncSavedInstructions(data);
       syncSavedStarters(data);
       setCurrentAgentId(data.id);
+      // Saved new Agent owns the Builder now; unlock the previous Chat selection
+      // without replacing the freshly created Agent with the old Research Agent.
+      setTemplateBuilderSession(null);
       showToast({
         message: `${localize('com_assistants_create_success')} ${
           data.name ?? localize('com_ui_agent')
@@ -1001,6 +1049,8 @@ export default function AgentPanel() {
                   className="w-full justify-center"
                   onClick={() => {
                     reset(getDefaultAgentFormValues(defaultStatefulCodeEnvironment));
+                    setTemplateBuilderSession(null);
+                    setPendingMarketplaceTemplate(null);
                     setCurrentAgentId(undefined);
                   }}
                   disabled={agentQuery.isInitialLoading}
