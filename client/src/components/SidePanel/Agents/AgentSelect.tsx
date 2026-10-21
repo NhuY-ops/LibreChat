@@ -283,10 +283,21 @@ function AgentSelect({
   useEffect(() => {
     // A previous Research Agent query may still settle after the user clicks
     // Use template. Do not let its response reset the blank/AI Image Creator form.
-    if (!activeMarketplaceDraft && agentQuery.data && agentQuery.isSuccess) {
+    if (
+      !activeMarketplaceDraft &&
+      selectedAgentId &&
+      agentQuery.data?.id === selectedAgentId &&
+      agentQuery.isSuccess
+    ) {
       resetAgentForm(agentQuery.data, true);
     }
-  }, [activeMarketplaceDraft, agentQuery.data, agentQuery.isSuccess, resetAgentForm]);
+  }, [
+    activeMarketplaceDraft,
+    selectedAgentId,
+    agentQuery.data,
+    agentQuery.isSuccess,
+    resetAgentForm,
+  ]);
 
   useEffect(() => {
     let timerId: NodeJS.Timeout | null = null;
