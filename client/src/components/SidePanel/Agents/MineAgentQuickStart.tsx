@@ -90,6 +90,12 @@ export default function MineAgentQuickStart() {
             <div className="border-border-light bg-surface-primary rounded-lg border p-2.5" role="group" aria-label="Selected Marketplace Agent template">
               <p className="text-text-primary text-xs font-semibold">{requestedTemplate.name}</p>
               <p className="text-text-secondary mt-1 text-xs">{requestedTemplate.description}</p>
+              {requestedTemplate.requiredTool && (
+                <p className="text-text-secondary mt-1 text-xs" role="note">
+                  Real media output needs a connected {requestedTemplate.requiredTool}.
+                  This blueprint only supplies instructions until a compatible Tool is configured.
+                </p>
+              )}
               <button
                 type="button"
                 className="bg-surface-tertiary text-text-primary hover:bg-surface-hover mt-2 rounded-md px-2.5 py-1.5 text-xs font-medium"
@@ -107,6 +113,12 @@ export default function MineAgentQuickStart() {
             </Link>
           )}
           {selectedTemplateId === 'research' && <MineResearchPilotTools />}
+          {selectedTemplateId && requestedTemplate?.id === selectedTemplateId && requestedTemplate.requiredTool && (
+            <p className="text-text-secondary mt-2 text-xs" role="note">
+              Setup needed for rendering: {requestedTemplate.requiredTool}. Use Tools → Add to
+              connect a compatible service yourself; saving this Agent does not provision it.
+            </p>
+          )}
 
           {pending && (
             <div
