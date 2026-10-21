@@ -48,11 +48,26 @@ const mockLocalize = jest.fn((key: string, options?: { count?: number; category?
 });
 
 let mockHasAccess = true;
+let mockMarketplaceAccess = true;
+let mockAgentUseAccess = true;
+let mockAgentCreateAccess = true;
 
 jest.mock('~/hooks', () => ({
   useLocalize: () => mockLocalize,
   useDocumentTitle: jest.fn(),
-  useHasAccess: jest.fn(() => mockHasAccess),
+  useHasAccess: jest.fn(({ permissionType, permission }: { permissionType: string; permission: string }) => {
+    const { PermissionTypes, Permissions } = jest.requireActual('librechat-data-provider');
+    if (permissionType === PermissionTypes.MARKETPLACE && permission === Permissions.USE) {
+      return mockHasAccess && mockMarketplaceAccess;
+    }
+    if (permissionType === PermissionTypes.AGENTS && permission === Permissions.USE) {
+      return mockHasAccess && mockAgentUseAccess;
+    }
+    if (permissionType === PermissionTypes.AGENTS && permission === Permissions.CREATE) {
+      return mockHasAccess && mockAgentCreateAccess;
+    }
+    return mockHasAccess;
+  }),
   useAgentCategories: jest.fn(() => ({ categories: mockCategories })),
   useDebounce: (value: string) => value,
 }));
@@ -162,6 +177,9 @@ const currentUrl = () => screen.getByTestId('location').textContent;
 describe('Marketplace controls and agent results', () => {
   beforeEach(() => {
     mockHasAccess = true;
+    mockMarketplaceAccess = true;
+    mockAgentUseAccess = true;
+    mockAgentCreateAccess = true;
     marketplace.mockReset();
   });
 
@@ -170,6 +188,32 @@ describe('Marketplace controls and agent results', () => {
       queryClient.clear();
     }
     queryClients.clear();
+  });
+
+  it('shows curated Templates to Agent creators without shared Marketplace USE', () => {
+    mockMarketplaceAccess = false;
+    renderMarketplace('/agents/templates', []);
+    expect(screen.getByRole('heading', { name: 'Agent Templates' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Configure Research Analyst template' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Explore published Agents' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('admin-settings')).not.toBeInTheDocument();
+    expect(marketplace).not.toHaveBeenCalled();
+  });
+
+  it('does not let users without Marketplace USE view published Agents', () => {
+    mockMarketplaceAccess = false;
+    renderMarketplace('/agents/all', [agent('shared')]);
+    expect(screen.queryByText('shared')).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Agent Templates' })).not.toBeInTheDocument();
+    expect(marketplace).not.toHaveBeenCalled();
+  });
+
+  it('does not expose the template gallery without AGENTS CREATE permission', () => {
+    mockMarketplaceAccess = false;
+    mockAgentCreateAccess = false;
+    renderMarketplace('/agents/templates');
+    expect(screen.queryByRole('heading', { name: 'Agent Templates' })).not.toBeInTheDocument();
+    expect(marketplace).not.toHaveBeenCalled();
   });
 
   it('shows the newly sorted results after changing the sort control', async () => {
