@@ -67,7 +67,7 @@ describe('MINE Marketplace template gallery', () => {
     expect(screen.getByText(/Actual rendered media requires|Real generated media requires/)).toBeInTheDocument();
     expect(screen.getByText(/compatible image generation tool|configured image generation tool/)).toBeInTheDocument();
     expect(screen.getByText('Workflow')).toBeInTheDocument();
-    expect(screen.getByText(/nothing is generated|does not create or publish an Agent/i)).toBeInTheDocument();
+    expect(screen.getByText(/This preview does not create or publish an Agent/i)).toBeInTheDocument();
   });
 
   it('routes a creative template into the unsaved Agent Builder draft', () => {
