@@ -21,6 +21,7 @@ import type { LucideIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { EModelEndpoint } from 'librechat-data-provider';
 import { activePanelAtom } from '~/Providers';
+import { mineTemplateHandoffAtom } from '~/components/SidePanel/Agents/mineTemplateHandoff';
 import { MINE_AGENT_TEMPLATES } from '~/components/SidePanel/Agents/mineAgentTemplates';
 import type { MineAgentTemplate, MineCreativeCollection } from '~/components/SidePanel/Agents/mineAgentTemplates';
 
@@ -75,6 +76,7 @@ function matchesCollection(template: MineAgentTemplate, filter: CollectionFilter
 export default function MineTemplateMarketplace({ searchQuery = '' }: { searchQuery?: string }) {
   const navigate = useNavigate();
   const setActivePanel = useSetAtom(activePanelAtom);
+  const setTemplateHandoff = useSetAtom(mineTemplateHandoffAtom);
   const [filter, setFilter] = useState<CollectionFilter>('all');
   const [previewId, setPreviewId] = useState<string | null>(null);
   const counts = useMemo(() => {
@@ -98,9 +100,11 @@ export default function MineTemplateMarketplace({ searchQuery = '' }: { searchQu
   const selected = templates.find((item) => item.id === previewId);
 
   const configureTemplate = (template: MineAgentTemplate) => {
-    // The destination is a new Agent draft, not the currently saved Agent.
-    // Opening Builder automatically avoids requiring the user to discover the
-    // sidebar tab after navigating away from Marketplace.
+    // Chat routing may strip /c/new query parameters during normalization.
+    // Carry the exact template id in same-tab memory as the reliable handoff;
+    // keep the URL parameter for deep links and transparent navigation.
+    // No Agent is created, modified or charged by this operation.
+    setTemplateHandoff(template.id);
     setActivePanel(EModelEndpoint.agents);
     navigate(`/c/new?mineAgentTemplate=${encodeURIComponent(template.id)}`);
   };
