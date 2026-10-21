@@ -1,6 +1,6 @@
 import React, { useMemo, useCallback, useEffect, useRef, useState } from 'react';
 import { Plus } from 'lucide-react';
-import { useAtom, useSetAtom } from 'jotai';
+import { useAtom } from 'jotai';
 import isEqual from 'lodash/isEqual';
 import { Button, useToastContext } from '@librechat/client';
 import { useWatch, useForm, FormProvider } from 'react-hook-form';
@@ -479,7 +479,7 @@ export default function AgentPanel() {
     agent_id: current_agent_id,
   } = useAgentPanelContext();
   const [pendingMarketplaceTemplate, setPendingMarketplaceTemplate] = useAtom(mineTemplateHandoffAtom);
-  const setTemplateBuilderSession = useSetAtom(mineTemplateBuilderSessionAtom);
+  const [templateBuilderSession, setTemplateBuilderSession] = useAtom(mineTemplateBuilderSessionAtom);
   const defaultStatefulCodeEnvironment =
     resolveStatefulCodeEnvironment(
       user?.personalization?.statefulCodeEnvironment ?? 'user',
@@ -550,16 +550,29 @@ export default function AgentPanel() {
    * may strip or on a QuickStart child that only mounts for blank Agent forms.
    * No persisted Agent is updated by this operation.
    */
+  const initializedMarketplaceDraftRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!pendingMarketplaceTemplate) {
+    // Keep the id in the Builder session even after the one-shot handoff has
+    // been consumed: routing can remount AgentPanel between Marketplace and
+    // Chat, and that must reinitialize the form rather than show a blank Agent.
+    const templateId = pendingMarketplaceTemplate ?? templateBuilderSession;
+    if (!templateId) {
+      initializedMarketplaceDraftRef.current = null;
       return;
     }
-    const template = MINE_AGENT_TEMPLATES.find((item) => item.id === pendingMarketplaceTemplate);
+    if (initializedMarketplaceDraftRef.current === templateId) {
+      if (pendingMarketplaceTemplate) {
+        setPendingMarketplaceTemplate(null);
+      }
+      return;
+    }
+    const template = MINE_AGENT_TEMPLATES.find((item) => item.id === templateId);
     if (!template) {
       setPendingMarketplaceTemplate(null);
       setTemplateBuilderSession(null);
       return;
     }
+    initializedMarketplaceDraftRef.current = templateId;
     reset({
       ...getDefaultAgentFormValues(defaultStatefulCodeEnvironment),
       name: template.name,
@@ -572,9 +585,12 @@ export default function AgentPanel() {
     });
     setCurrentAgentId(undefined);
     setActivePanel(Panel.builder);
-    setPendingMarketplaceTemplate(null);
+    if (pendingMarketplaceTemplate) {
+      setPendingMarketplaceTemplate(null);
+    }
   }, [
     pendingMarketplaceTemplate,
+    templateBuilderSession,
     defaultStatefulCodeEnvironment,
     reset,
     setActivePanel,
