@@ -220,6 +220,7 @@ describe('MINE Knowledge Base management API', () => {
       .send({ tags: [' Immunology ', 'research', 'immunology'] });
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ file_id: FILE_ID, tags: ['immunology', 'research'] });
+    expect(mockFindOneAndUpdate.mock.calls[0][1][0].$set.file_tags.$concatArrays[0].$filter.cond.$ne[0]).toBe('$entry.file_id');
     expect(mockFindOneAndUpdate).toHaveBeenCalledWith(
       { owner: 'owner-a', tenantId: 'team-one', _id: KB_ID, file_ids: FILE_ID },
       expect.arrayContaining([expect.objectContaining({ $set: expect.any(Object) })]),
