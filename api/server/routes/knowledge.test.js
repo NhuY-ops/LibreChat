@@ -11,6 +11,9 @@ const mockFindOneAndDelete = jest.fn();
 const mockFileFindOne = jest.fn();
 const mockFileFind = jest.fn();
 const mockAgentFindOne = jest.fn();
+const mockConvoFindOne = jest.fn();
+const mockChatSelectionFindOne = jest.fn();
+const mockChatSelectionUpsert = jest.fn();
 
 jest.mock('@librechat/data-schemas', () => ({
   getTenantId: () => mockGetTenantId(),
@@ -24,6 +27,9 @@ jest.mock('~/db/models', () => ({
   Agent: {
     findOne: (...args) => ({ select: () => ({ lean: () => mockAgentFindOne(...args) }) }),
   },
+  Conversation: {
+    findOne: (...args) => ({ select: () => ({ lean: () => mockConvoFindOne(...args) }) }),
+  },
   File: {
     findOne: (...args) => ({
       select: () => ({ lean: () => mockFileFindOne(...args) }),
@@ -36,12 +42,18 @@ jest.mock('~/db/models', () => ({
 jest.mock('~/server/services/KnowledgeBase/model', () => ({
   find: (...args) => ({
     sort: () => ({ limit: () => ({ lean: () => mockFind(...args) }) }),
+    select: () => ({ lean: () => mockFind(...args) }),
   }),
   countDocuments: (...args) => mockCount(...args),
   create: (...args) => mockCreate(...args),
   findOne: (...args) => ({ lean: () => mockFindOne(...args) }),
   findOneAndUpdate: (...args) => ({ lean: () => mockFindOneAndUpdate(...args) }),
   findOneAndDelete: (...args) => ({ lean: () => mockFindOneAndDelete(...args) }),
+}));
+
+jest.mock('~/server/services/KnowledgeBase/chatSelection', () => ({
+  findOne: (...args) => ({ lean: () => mockChatSelectionFindOne(...args) }),
+  findOneAndUpdate: (...args) => mockChatSelectionUpsert(...args),
 }));
 
 const app = express();
@@ -69,6 +81,86 @@ beforeEach(() => {
   mockFileFindOne.mockResolvedValue({ _id: 'file-mongo-id' });
   mockFileFind.mockResolvedValue([]);
   mockAgentFindOne.mockResolvedValue({ _id: 'valid-agent' });
+  mockConvoFindOne.mockResolvedValue({ agent_id: 'agent_abc123' });
+  mockChatSelectionFindOne.mockResolvedValue(null);
+  mockChatSelectionUpsert.mockResolvedValue({});
+
+});
+
+describe('MINE Chat KB V4 routes (restrict existing Agent grants)', () => {
+  const route = '/api/knowledge/chat/chat-123';
+  const granted = [{
+    _id: KB_ID, name: 'Research', file_ids: [FILE_ID],
+    agent_access: [{ agent_id: 'agent_abc123', tags: ['immunology'] }],
+  }];
+
+  it('shows already granted KBs and inherits V3 when no per-chat record exists', async () => {
+    mockFind.mockResolvedValueOnce(granted);
+    const result = await request(app).get(route);
+    expect(result.status).toBe(200);
+    expect(result.body.inherited).toBe(true);
+    expect(result.body.selected).toEqual([{ kb_id: KB_ID, tags: [] }]);
+    expect(result.body.available[0]).toMatchObject({
+      kb_id: KB_ID, name: 'Research', file_count: 1, agent_tags: ['immunology'],
+    });
+    expect(mockConvoFindOne).toHaveBeenCalledWith(expect.objectContaining({
+      user: 'owner-a', tenantId: 'team-one', conversationId: 'chat-123',
+    }));
+    expect(mockFind).toHaveBeenCalledWith(expect.objectContaining({
+      owner: 'owner-a', tenantId: 'team-one', 'agent_access.agent_id': 'agent_abc123',
+    }));
+  });
+
+  it('returns empty when the user explicitly disables all KBs in this chat', async () => {
+    mockFind.mockResolvedValueOnce(granted);
+    mockChatSelectionFindOne.mockResolvedValueOnce({ libraries: [] });
+    const result = await request(app).get(route);
+    expect(result.status).toBe(200);
+    expect(result.body.selected).toEqual([]);
+    expect(result.body.inherited).toBe(false);
+  });
+
+  it('saves explicit empty selection, including tenant and conversation in scope', async () => {
+    const result = await request(app).put(route).send({ libraries: [] });
+    expect(result.status).toBe(200);
+    expect(mockChatSelectionUpsert).toHaveBeenCalledWith({
+      owner: 'owner-a', tenantId: 'team-one',
+      conversationId: 'chat-123', agentId: 'agent_abc123',
+    }, { $set: { libraries: [] } }, expect.objectContaining({ upsert: true }));
+  });
+
+  it('accepts tags only as narrowing filters for already granted KBs', async () => {
+    mockFind.mockResolvedValueOnce(granted);
+    const result = await request(app).put(route).send({
+      libraries: [{ kb_id: KB_ID, tags: ['Immunology', 'immunology'] }],
+    });
+    expect(result.status).toBe(200);
+    expect(result.body.selected).toEqual([{ kb_id: KB_ID, tags: ['immunology'] }]);
+  });
+
+  it('denies selecting KBs not granted to the Agent', async () => {
+    mockFind.mockResolvedValueOnce([]);
+    const result = await request(app).put(route).send({
+      libraries: [{ kb_id: KB_ID, tags: [] }],
+    });
+    expect(result.status).toBe(403);
+    expect(mockChatSelectionUpsert).not.toHaveBeenCalled();
+  });
+
+  it('denies a conversation that is not owned by the authenticated user', async () => {
+    mockConvoFindOne.mockResolvedValueOnce(null);
+    const result = await request(app).put(route).send({ libraries: [] });
+    expect(result.status).toBe(404);
+    expect(mockChatSelectionUpsert).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid/duplicate KB IDs before writing', async () => {
+    const result = await request(app).put(route).send({
+      libraries: [{ kb_id: KB_ID }, { kb_id: KB_ID }],
+    });
+    expect(result.status).toBe(400);
+    expect(mockChatSelectionUpsert).not.toHaveBeenCalled();
+  });
 });
 
 describe('MINE Knowledge Base management API', () => {
