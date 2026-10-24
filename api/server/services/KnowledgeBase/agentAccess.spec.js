@@ -1,27 +1,27 @@
-const agentFind = jest.fn();
-const kbFind = jest.fn();
-const fileFind = jest.fn();
-const tenant = jest.fn();
+const mockAgentFind = jest.fn();
+const mockKbFind = jest.fn();
+const mockFileFind = jest.fn();
+const mockTenant = jest.fn();
 jest.mock('@librechat/data-schemas', () => ({
-  getTenantId: () => tenant(),
+  getTenantId: () => mockTenant(),
   SYSTEM_TENANT_ID: '__SYSTEM__',
   logger: { error: jest.fn() },
 }));
 jest.mock('~/db/models', () => ({
-  Agent: { findOne: (...a) => ({ select: () => ({ lean: () => agentFind(...a) }) }) },
-  File: { find: (...a) => ({ select: () => ({ lean: () => fileFind(...a) }) }) },
+  Agent: { findOne: (...a) => ({ select: () => ({ lean: () => mockAgentFind(...a) }) }) },
+  File: { find: (...a) => ({ select: () => ({ lean: () => mockFileFind(...a) }) }) },
 }));
 jest.mock('./model', () => ({
-  find: (...a) => ({ select: () => ({ lean: () => kbFind(...a) }) }),
+  find: (...a) => ({ select: () => ({ lean: () => mockKbFind(...a) }) }),
 }));
 const { grantedFileIds, resolveAgentKnowledgeFiles } = require('./agentAccess');
 
 beforeEach(() => {
   jest.clearAllMocks();
-  tenant.mockReturnValue('team-a');
-  agentFind.mockResolvedValue({ _id: 'owned' });
-  kbFind.mockResolvedValue([]);
-  fileFind.mockResolvedValue([]);
+  mockTenant.mockReturnValue('team-a');
+  mockAgentFind.mockResolvedValue({ _id: 'owned' });
+  mockKbFind.mockResolvedValue([]);
+  mockFileFind.mockResolvedValue([]);
 });
 describe('Agent KB retrieval (fail closed)', () => {
   const params = { agentId: 'agent_test', userId: 'user-a', tenantId: 'team-a' };
@@ -46,55 +46,55 @@ describe('Agent KB retrieval (fail closed)', () => {
     ], params.agentId)).toEqual(['a', 'b', 'c']);
   });
   it('rejects shared Agents rather than inheriting grants', async () => {
-    agentFind.mockResolvedValueOnce(null);
+    mockAgentFind.mockResolvedValueOnce(null);
     expect(await resolveAgentKnowledgeFiles(params)).toEqual([]);
-    expect(agentFind).toHaveBeenCalledWith({
+    expect(mockAgentFind).toHaveBeenCalledWith({
       id: params.agentId, author: params.userId, tenantId: params.tenantId,
     });
-    expect(kbFind).not.toHaveBeenCalled();
+    expect(mockKbFind).not.toHaveBeenCalled();
   });
-  it('rechecks tenant, ownership, embedding and expiry for each file', async () => {
-    kbFind.mockResolvedValueOnce([
+  it('rechecks mockTenant, ownership, embedding and expiry for each file', async () => {
+    mockKbFind.mockResolvedValueOnce([
       { file_ids: ['a', 'expired'], agent_access: [{ agent_id: params.agentId, tags: [] }] },
     ]);
-    fileFind.mockResolvedValueOnce([{ file_id: 'a', filename: 'notes.pdf', user: params.userId }]);
+    mockFileFind.mockResolvedValueOnce([{ file_id: 'a', filename: 'notes.pdf', user: params.userId }]);
     expect(await resolveAgentKnowledgeFiles(params)).toEqual([
       { file_id: 'a', filename: 'notes.pdf', user: params.userId, kbManaged: true },
     ]);
-    expect(kbFind).toHaveBeenCalledWith({
+    expect(mockKbFind).toHaveBeenCalledWith({
       owner: params.userId, tenantId: params.tenantId, 'agent_access.agent_id': params.agentId,
     });
-    expect(fileFind).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mockFileFind).toHaveBeenCalledWith(expect.objectContaining({
       user: params.userId, tenantId: params.tenantId, embedded: true,
       file_id: { $in: ['a', 'expired'] }, $or: expect.any(Array),
     }));
   });
   it('denies revoked grant', async () => {
-    kbFind.mockResolvedValueOnce([{ file_ids: ['a'], agent_access: [] }]);
+    mockKbFind.mockResolvedValueOnce([{ file_ids: ['a'], agent_access: [] }]);
     expect(await resolveAgentKnowledgeFiles(params)).toEqual([]);
-    expect(fileFind).not.toHaveBeenCalled();
+    expect(mockFileFind).not.toHaveBeenCalled();
   });
-  it('denies missing tenant context in strict mode', async () => {
+  it('denies missing mockTenant context in strict mode', async () => {
     const before = process.env.TENANT_ISOLATION_STRICT;
     process.env.TENANT_ISOLATION_STRICT = 'true';
-    tenant.mockReturnValue(undefined);
+    mockTenant.mockReturnValue(undefined);
     try {
       expect(await resolveAgentKnowledgeFiles({ ...params, tenantId: undefined })).toEqual([]);
-      expect(agentFind).not.toHaveBeenCalled();
+      expect(mockAgentFind).not.toHaveBeenCalled();
     } finally {
       if (before == null) delete process.env.TENANT_ISOLATION_STRICT;
       else process.env.TENANT_ISOLATION_STRICT = before;
     }
   });
-  it('denies mismatched authenticated and request tenant contexts', async () => {
-    tenant.mockReturnValue('team-b');
+  it('denies mismatched authenticated and request mockTenant contexts', async () => {
+    mockTenant.mockReturnValue('team-b');
     expect(await resolveAgentKnowledgeFiles({
       agentId: 'agent_test', userId: 'user-a', tenantId: 'team-a',
     })).toEqual([]);
-    expect(agentFind).not.toHaveBeenCalled();
+    expect(mockAgentFind).not.toHaveBeenCalled();
   });
   it('denies DB failures', async () => {
-    kbFind.mockRejectedValueOnce(new Error('network'));
+    mockKbFind.mockRejectedValueOnce(new Error('network'));
     expect(await resolveAgentKnowledgeFiles(params)).toEqual([]);
   });
 });
