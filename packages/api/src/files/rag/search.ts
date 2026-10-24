@@ -4,7 +4,7 @@ import type axios from 'axios';
 import type { FileCitationSelectionConfig, selectFileCitationSources } from '../citations';
 import type { logAxiosError } from '~/utils/axios';
 
-type SearchFile = { file_id: string; fromAgent?: boolean };
+type SearchFile = { file_id: string; fromAgent?: boolean; kbManaged?: boolean };
 type FileSearchResult = [
   string,
   { file_search: { sources: FileSearchSource[]; fileCitations: boolean } } | undefined,
@@ -75,7 +75,9 @@ export async function executeFileSearchQuery({
       k: 5,
     };
     // Only agent knowledge-base files carry entity_id. User attachments must stay user-scoped.
-    if (!entity_id || file.fromAgent !== true) {
+    // KB grants authorize user-indexed files, not agent-owned vector namespaces.
+    // A KB marker must override any legacy fromAgent bit to prevent false misses.
+    if (file.kbManaged === true || !entity_id || file.fromAgent !== true) {
       return body;
     }
     body.entity_id = entity_id;
