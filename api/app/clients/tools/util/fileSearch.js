@@ -90,7 +90,7 @@ const primeFiles = async (options) => {
       toolContext = `- Note: Use the ${Tools.file_search} tool to find relevant information within:`;
     }
     toolContext += `\n\t- ${file.filename}${
-      agentResourceIds.has(file.file_id) ? '' : ' (just attached by user)'
+      file.kbManaged ? ' (Knowledge Base)' : agentResourceIds.has(file.file_id) ? '' : ' (just attached by user)'
     }`;
     files.push({
       file_id: file.file_id,
