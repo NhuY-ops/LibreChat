@@ -95,11 +95,11 @@ const primeFiles = async (options) => {
     files.push({
       file_id: file.file_id,
       filename: file.filename,
-      // KB-managed files are already indexed in the *user* namespace.
-      // fromAgent would incorrectly target this Agent's vector namespace.
-      // Direct Agent resource files retain their original namespace.
-      fromAgent: agentResourceIds.has(file.file_id),
+      // Direct resource files use the current Agent namespace. KB-linked
+      // files use their independently verified original embedding namespace.
+      fromAgent: agentResourceIds.has(file.file_id) || Boolean(file.ragEntityId),
       ...(file.kbManaged ? { kbManaged: true } : {}),
+      ...(file.ragEntityId ? { ragEntityId: file.ragEntityId } : {}),
     });
   }
 
@@ -135,14 +135,37 @@ const createFileSearchTool = async ({
           userId,
           tenantId,
         });
-        const allowed = new Set(authorized.map((f) => f.file_id));
-        currentFiles = files.filter((f) => !f.kbManaged || allowed.has(f.file_id));
+        const allowed = new Map(authorized.map((f) => [f.file_id, f]));
+        currentFiles = files.flatMap((file) => {
+          if (!file.kbManaged) return [file];
+          const fresh = allowed.get(file.file_id);
+          if (!fresh) return [];
+          return [{
+            ...file,
+            fromAgent: Boolean(fresh.ragEntityId),
+            ...(fresh.ragEntityId ? { ragEntityId: fresh.ragEntityId } : {}),
+            // Removing this stale field matters when a file was reindexed
+            // into user scope between priming and retrieval.
+            ...(!fresh.ragEntityId ? { ragEntityId: undefined } : {}),
+          }];
+        });
       }
-      return executeFileSearchQuery({
+      // The existing @librechat/api query handler uses one entity_id per
+      // request. Run it once per verified vector namespace instead of
+      // passing the current Agent ID for all KB-origin files.
+      const groups = new Map();
+      for (const file of currentFiles) {
+        const namespace = file.kbManaged
+          ? (file.ragEntityId ?? '')
+          : (file.fromAgent ? (entity_id ?? '') : '');
+        if (!groups.has(namespace)) groups.set(namespace, []);
+        groups.get(namespace).push(file);
+      }
+      const search = (namespace, scopedFiles) => executeFileSearchQuery({
         query,
         userId,
-        files: currentFiles,
-        entity_id,
+        files: scopedFiles,
+        entity_id: namespace || undefined,
         fileCitations,
         appConfig,
         ragApiUrl: process.env.RAG_API_URL,
@@ -152,6 +175,31 @@ const createFileSearchTool = async ({
         selectFileCitationSources,
         logger,
       });
+      if (!groups.size) return search('', []);
+      if (groups.size === 1) {
+        const [namespace, groupFiles] = groups.entries().next().value;
+        return search(namespace, groupFiles);
+      }
+      // Preserve old citations when multiple separately authorized source
+      // namespaces contribute results to a single tool call.
+      const responses = await Promise.all([...groups].map(([namespace, scopedFiles]) =>
+        search(namespace, scopedFiles),
+      ));
+      const sources = [];
+      const chunks = [];
+      for (const [content, artifact] of responses) {
+        const shift = sources.length;
+        const currentSources = artifact?.[Tools.file_search]?.sources ?? [];
+        chunks.push(content.replace(/\\ue202turn0file(\d+)/g, (_match, n) =>
+          `\\ue202turn0file${Number(n) + shift}`));
+        sources.push(...currentSources);
+      }
+      return [
+        chunks.join('\n---\n'),
+        sources.length
+          ? { [Tools.file_search]: { sources, fileCitations } }
+          : undefined,
+      ];
     },
     {
       name: Tools.file_search,
