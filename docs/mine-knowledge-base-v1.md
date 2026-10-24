@@ -36,7 +36,9 @@ NODE_ENV=development npx jest --runInBand --coverage=false --watch=false src/com
 
 # From repository root: server-side route tests
 cd ..
-NODE_ENV=test npx jest --runInBand --coverage=false --watch=false api/server/routes/knowledge.test.js
+cd api
+NODE_ENV=test npx jest --runInBand --coverage=false --watch=false server/routes/knowledge.test.js
+cd ..
 ```
 
 **Critical deployment caveat:** the base `docker-compose.yml` uses `registry.librechat.ai/librechat-ai/librechat-dev:latest` for the `api` service and does not bind-mount the application's source directory. Running `git pull` or restarting that stock container alone **will not** load this locally modified route.
