@@ -394,3 +394,53 @@ should return HTTP 401. Additional routes respond with 401 when unauthenticated.
 
 V4.2 can add pre-first-message selection and separate non-Agent chat support
 with authenticated per-chat File Search and no reliance on an Agent's grants.
+
+
+## MINE KB V4.2 phase 1 — saved regular chat KB access (2026-10-24)
+
+This change is deliberately limited to existing **saved, non-temporary, owner-only
+regular conversations**. V4.1 saved Agent chats remain unchanged. It does
+**not** yet let a New Chat search selected KBs in its first message.
+
+- The composer now renders the Chat KB picker for regular chats with tools enabled,
+  using the existing popup portal fix. Unlike Agents, regular chats start with
+  **KB 0** and inherit no KBs.
+- GET/PUT `/api/knowledge/chat/:conversationId` distinguishes an owned Agent
+  conversation (V3 Agent grants) from an owned regular conversation (owned KBs
+  only). Existing Agent records keep their previous unique-index key.
+- Regular selections live in the same `minechatknowledgeselections` collection
+  with an internal `__mine_regular_chat__` key. The client cannot forge the
+  scope; it is determined by a server-side lookup of the owned conversation.
+- File Search resolves only explicitly selected KBs in saved regular chats.
+  It re-checks user, tenant, conversation, current membership/tags, embedded
+  status, expiry, and original Agent RAG namespace every invocation.
+  Turning KB off between priming and tool execution denies the KB file.
+- Direct user attachments are not changed. Shared conversations and temporary
+  chats cannot create or inherit regular KB selections.
+
+**Development validation (not a claim of execution):**
+
+```bash
+cd ~/mine-ai/api
+NODE_ENV=test npx jest --runInBand --coverage=false --watch=false \
+  server/routes/knowledge.test.js \
+  server/services/KnowledgeBase/agentAccess.spec.js \
+  server/services/KnowledgeBase/chatAccess.spec.js \
+  test/app/clients/tools/util/fileSearch.test.js
+cd ~/mine-ai/client
+npm run typecheck
+```
+
+Deploy after both pass using `scripts/mine-kb-v42-deploy.sh`, which backs up
+and copies exactly six backend JS files; it restarts only the API container.
+Do not reuse the old five-file V4.1 deploy script for this patch.
+
+**Manual test:** In a saved regular chat with File Search enabled, select
+`medical research`, save, ask a document question that does not reveal its
+answer, check File Search citation; disable KB and use a fresh regular chat
+with an explicit `KB 0` selection to verify the document cannot be searched.
+Separately verify existing Agent V4.1 chats still work as before.
+
+**Next stage:** pre-first-message KB selection with fail-closed first-turn
+authorization and first-message persistence; ordinary chats that do not have
+the File Search tool enabled cannot retrieve KB content.
