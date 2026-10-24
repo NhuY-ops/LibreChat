@@ -23,7 +23,7 @@ import { useGetFiles } from '~/data-provider';
 import { useAuthContext } from '~/hooks';
 import { activePanelAtom } from '~/Providers';
 import { showFilesDialogAtom } from '~/store/filesDialog';
-import { filterIndexedFiles } from './knowledgeFiles';
+import { filterIndexedFiles, normalizeKnowledgeTag } from './knowledgeFiles';
 
 type KnowledgeBase = {
   _id: string;
@@ -39,6 +39,7 @@ type LinkedFile = {
   filename: string;
   bytes?: number;
   type?: string;
+  tags?: string[];
 };
 
 const kbUrl = () => `${apiBaseUrl()}/api/knowledge`;
@@ -70,6 +71,7 @@ export default function KnowledgeBaseView() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [actionError, setActionError] = useState('');
+  const [tagInputs, setTagInputs] = useState<Record<string, string>>({});
 
   const { data: files = [], isLoading: filesLoading, isError: filesError, refetch: refetchFiles } =
     useGetFiles<TFile[]>();
@@ -98,15 +100,17 @@ export default function KnowledgeBaseView() {
     ]);
   };
 
-  const perform = async (operation: () => Promise<void>) => {
-    if (pending) return;
+  const perform = async (operation: () => Promise<void>): Promise<boolean> => {
+    if (pending) return false;
     setPending(true);
     setActionError('');
     try {
       await operation();
       await refreshKBs();
+      return true;
     } catch (error) {
       setActionError(getErrorText(error));
+      return false;
     } finally {
       setPending(false);
     }
@@ -138,6 +142,15 @@ export default function KnowledgeBaseView() {
     if (!selectedId) return;
     await perform(async () => {
       await request.delete(`${kbUrl()}/${selectedId}/files/${encodeURIComponent(fileId)}`);
+    });
+  };
+
+  const saveTags = (fileId: string, tags: string[]): Promise<boolean> => {
+    if (!selectedId) return Promise.resolve(false);
+    return perform(async () => {
+      await request.patch(`${kbUrl()}/${selectedId}/files/${encodeURIComponent(fileId)}/tags`, {
+        tags,
+      });
     });
   };
 
@@ -329,20 +342,85 @@ export default function KnowledgeBaseView() {
               <p className="text-text-secondary p-4 text-sm">No accessible indexed documents in this library yet.</p>
             ) : (
               <ul className="divide-border-light divide-y">
-                {linkedFiles.map((file) => (
-                  <li key={file.file_id} className="flex min-w-0 items-center gap-3 p-3">
-                    <FileText className="text-text-secondary size-4 shrink-0" aria-hidden="true" />
-                    <span className="min-w-0 flex-1 truncate text-sm" title={file.filename}>{file.filename}</span>
-                    <button
-                      type="button"
-                      disabled={pending}
-                      onClick={() => void removeFile(file.file_id)}
-                      className="text-text-secondary shrink-0 text-xs underline disabled:opacity-50"
-                    >
-                      Remove
-                    </button>
-                  </li>
-                ))}
+                {linkedFiles.map((file) => {
+                  const tags = file.tags ?? [];
+                  const draft = tagInputs[file.file_id] ?? '';
+                  const normalized = normalizeKnowledgeTag(draft);
+                  const canAddTag =
+                    !pending && normalized.length > 0 && normalized.length <= 32 &&
+                    tags.length < 10 && !tags.includes(normalized);
+                  return (
+                    <li key={file.file_id} className="flex min-w-0 flex-col gap-2 p-3">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <FileText className="text-text-secondary size-4 shrink-0" aria-hidden="true" />
+                        <span className="min-w-0 flex-1 truncate text-sm" title={file.filename}>
+                          {file.filename}
+                        </span>
+                        <button
+                          type="button"
+                          disabled={pending}
+                          onClick={() => void removeFile(file.file_id)}
+                          className="text-text-secondary shrink-0 text-xs underline disabled:opacity-50"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 pl-7" aria-label={`Tags for ${file.filename}`}>
+                        {tags.map((tag) => (
+                          <span key={tag} className="border-border-light bg-surface-secondary inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs">
+                            {tag}
+                            <button
+                              type="button"
+                              disabled={pending}
+                              onClick={() => void saveTags(file.file_id, tags.filter((item) => item !== tag))}
+                              aria-label={`Remove tag ${tag} from ${file.filename}`}
+                              className="text-text-secondary rounded-full disabled:opacity-50"
+                            >
+                              <X className="size-3" aria-hidden="true" />
+                            </button>
+                          </span>
+                        ))}
+                        <form
+                          className="inline-flex items-center gap-1"
+                          onSubmit={(event) => {
+                            event.preventDefault();
+                            if (!canAddTag) return;
+                            void saveTags(file.file_id, [...tags, normalized]).then((success) => {
+                              if (success) {
+                                setTagInputs((current) => ({ ...current, [file.file_id]: '' }));
+                              }
+                            });
+                          }}
+                        >
+                          <label htmlFor={`kb-tag-${file.file_id}`} className="sr-only">
+                            New tag for {file.filename}
+                          </label>
+                          <input
+                            id={`kb-tag-${file.file_id}`}
+                            type="text"
+                            value={draft}
+                            maxLength={32}
+                            disabled={pending || tags.length >= 10}
+                            onChange={(event) => setTagInputs((current) => ({
+                              ...current,
+                              [file.file_id]: event.target.value,
+                            }))}
+                            placeholder={tags.length >= 10 ? 'Tag limit reached' : 'New tag'}
+                            className="border-border-light bg-surface-secondary w-28 min-w-0 rounded-md border px-2 py-1 text-xs outline-none focus-visible:ring-2 disabled:opacity-50"
+                          />
+                          <button
+                            type="submit"
+                            disabled={!canAddTag}
+                            aria-label={`Add tag to ${file.filename}`}
+                            className="border-border-light bg-surface-secondary rounded-md border px-2 py-1 text-xs disabled:opacity-50"
+                          >
+                            Add tag
+                          </button>
+                        </form>
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
             )}
             <p className="text-text-secondary border-border-light border-t p-3 text-xs">
