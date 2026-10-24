@@ -96,6 +96,65 @@ describe('fileSearch.js - Knowledge Base runtime grants', () => {
     }
   });
 
+  it('queries legacy KB files through their original verified Agent namespace', async () => {
+    const axios = require('axios');
+    const { generateShortLivedToken } = require('@librechat/api');
+    const prior = process.env.RAG_API_URL;
+    process.env.RAG_API_URL = 'http://localhost:8000';
+    try {
+      resolveAgentKnowledgeFiles.mockResolvedValue([{
+        file_id: 'kb-agent-file', filename: 'clinical.txt', kbManaged: true,
+        ragEntityId: 'agent_original',
+      }]);
+      const primed = await primeFiles({
+        req: { user: { id: 'owner', role: 'USER', tenantId: 'team-a' } },
+        agentId: 'agent_current',
+        tool_resources: { file_search: { file_ids: [] } },
+      });
+      expect(primed.files[0]).toMatchObject({
+        file_id: 'kb-agent-file',
+        kbManaged: true,
+        fromAgent: true,
+        ragEntityId: 'agent_original',
+      });
+      generateShortLivedToken.mockReturnValue('token');
+      axios.post.mockResolvedValueOnce({
+        data: [[{ page_content: 'Original Agent passage', metadata: { source: '/clinical.txt' } }, 0.2]],
+      });
+      const searchTool = await createFileSearchTool({
+        userId: 'owner', tenantId: 'team-a', entity_id: 'agent_current',
+        files: primed.files,
+      });
+      const [text] = await searchTool.func({ query: 'clinical study' });
+      expect(text).toContain('Original Agent passage');
+      const ragCall = axios.post.mock.calls.find(([url]) => url.endsWith('/query'));
+      expect(ragCall[1]).toEqual({
+        file_id: 'kb-agent-file',
+        query: 'clinical study',
+        k: 5,
+        entity_id: 'agent_original',
+      });
+    } finally {
+      if (prior == null) delete process.env.RAG_API_URL;
+      else process.env.RAG_API_URL = prior;
+    }
+  });
+
+  it('drops a KB file when source-namespace authorization is revoked mid-turn', async () => {
+    const { generateShortLivedToken } = require('@librechat/api');
+    const searchTool = await createFileSearchTool({
+      userId: 'owner', tenantId: 'team-a', entity_id: 'agent_current',
+      files: [{
+        file_id: 'kb-agent-file', filename: 'clinical.txt', kbManaged: true,
+        fromAgent: true, ragEntityId: 'agent_original',
+      }],
+    });
+    resolveAgentKnowledgeFiles.mockResolvedValueOnce([]);
+    const [text] = await searchTool.func({ query: 'secret' });
+    expect(text).toMatch(/No files to search/);
+    expect(generateShortLivedToken).not.toHaveBeenCalled();
+  });
+
   it('does not expose KB files after grant revocation between priming and retrieval', async () => {
     resolveAgentKnowledgeFiles.mockResolvedValueOnce([]);
     const { generateShortLivedToken } = require('@librechat/api');
