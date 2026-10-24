@@ -319,3 +319,78 @@ require deploying TypeScript directly.
 Rollback by copying the same 3 files from the timestamped backup and restarting
 API. Never delete DB/RAG volumes or re-embed/delete the user's documents
 without explicit permission.
+
+## MINE Knowledge Base V4.1 — Chat KB Toggle (Agent chats)
+
+**Scope in this patch:** existing, saved, non-temporary **Agent conversations**
+with File Search enabled. Ordinary non-Agent chat and new-chat selection
+before the first message require different routing and are **not yet in V4.1**.
+
+A compact `KB N` control next to the chat composer's + icon opens a list of
+all KBs already granted to the current Agent. The user can enable/disable
+multiple KBs **for this conversation**, and optionally add further comma-
+separated tag filters per KB. The Save button persists an explicit selection
+and is isolated by authenticated owner, tenant, conversation ID and Agent ID.
+Refreshing the page retains the selection. If there is no chat-specific record,
+V3 Agent grants are inherited (backward-compatible). Saving an empty list
+explicitly disables all KB files for that chat.
+
+The backend requires that the conversation belongs to the authenticated user,
+is not temporary, and references an Agent authored by that same user/tenant.
+A chat selection can **only narrow** the Agent's existing KB grants and
+granted tags, never expand them. A second Mongo collection
+`minechatknowledgeselections` has a unique scoped key. File Search priming
+and execution independently resolve the current selection, preserving V3.2's
+source namespace and grant revocation guarantees. Directly attached Agent
+File Search resources are independent of KB toggles and are not removed.
+
+### Regression tests
+
+```bash
+cd ~/mine-ai
+git pull --ff-only origin mine-development
+cd api
+NODE_ENV=test npx jest --runInBand --coverage=false --watch=false \
+  server/routes/knowledge.test.js \
+  server/services/KnowledgeBase/agentAccess.spec.js \
+  test/app/clients/tools/util/fileSearch.test.js
+cd ..
+```
+
+Do not deploy on test failures. For frontend confidence, use
+`cd client && npm run typecheck` (separate dependency/build requirements apply).
+
+### Controlled local deployment after all backend tests pass
+
+The user's running API container is `mine-oss-librechat-api-1` and needs **five**
+files: the new `chatSelection.js` model, updated Knowledge Base route,
+resolver, File Search utility, and `handleTools.js`. This source code is not
+mounted. Copy the new file plus updated files to `/app` after backing up the
+four existing files, then restart only this API container. Do NOT recreate
+the Compose project or reset MongoDB/RAG volumes. Before hotpatching, remember
+that TypeScript frontend code is served by the **separate local Vite dev
+server** on :3090: Vite will pick up the new React source after git pull.
+
+When the API is ready, unauthenticated
+`curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3210/api/knowledge`
+should return HTTP 401. Additional routes respond with 401 when unauthenticated.
+
+### UI manual test
+
+1. Open an existing Research Analyst Agent chat (or send one short message in
+   a new chat to establish a persisted conversation).
+2. Locate the `KB N` button next to + in the composer; open it.
+3. Toggle `medical research` off, click Save for this chat, and start a new
+   message **in that same conversation** without directly attaching the KB file.
+   Search should no longer have access to the unique verification phrase.
+4. Toggle it on, Save, and search again. The source citation should return.
+5. Open a second saved Agent conversation: its selection should be independent.
+   Refresh the first conversation: its selection must persist.
+6. Test optional tag filtering using 2 differently tagged documents:
+   selected tags narrow the results, while untagged files are excluded.
+7. Revoke the underlying Agent grant in the Agent Builder and verify the
+   chat picker no longer offers it and File Search cannot retrieve it even
+   if the conversation selection previously included it.
+
+V4.2 can add pre-first-message selection and separate non-Agent chat support
+with authenticated per-chat File Search and no reliance on an Agent's grants.
