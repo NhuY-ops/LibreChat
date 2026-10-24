@@ -143,7 +143,7 @@ router.put('/:id/agent-access/:agentId', async (req, res) => {
       $filter: {
         input: { $ifNull: ['$agent_access', []] },
         as: 'grant',
-        cond: { $ne: ['$grant.agent_id', agentId] },
+        cond: { $ne: ['$$grant.agent_id', agentId] },
       },
     };
     const nextGrant = { $literal: enabled ? [{ agent_id: agentId, tags }] : [] };
@@ -254,7 +254,7 @@ router.patch('/:id/files/:fileId/tags', async (req, res) => {
       $filter: {
         input: { $ifNull: ['$file_tags', []] },
         as: 'entry',
-        cond: { $ne: ['$entry.file_id', fileId] },
+        cond: { $ne: ['$$entry.file_id', fileId] },
       },
     };
     // Always provide two arrays: clearing tags must still be a valid Mongo expression.
