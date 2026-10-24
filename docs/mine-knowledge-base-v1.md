@@ -187,3 +187,53 @@ that can only be answered by a permitted KB file. Then disable that KB
 and ask again in a *new* conversation; the Agent must no longer retrieve
 that KB, though knowledge disclosed in earlier chat messages can remain
 in conversational context.
+
+## MINE KB V3.1 — fix cross-namespace empty RAG results
+
+A file attached **via a new private KB** may have been embedded in the user's
+RAG namespace before it was associated with an Agent. Previously the KB
+integration set `fromAgent: true`, which caused the RAG query to include
+`entity_id: agent_ID`. That selects the Agent namespace rather than the
+original user-indexed file. An HTTP 200 with zero hits is a possible symptom.
+
+The File Search priming fix sets `fromAgent` only for original direct Agent
+tool-resource file IDs, not for a `kbManaged` association. The RAG source
+also defensively refuses Agent-namespace scoping for a KB-managed file.
+Owner, tenant, attachment and Agent-grant checks remain unchanged.
+
+The user's running container is a development-only hotpatch.
+`fileSearch.js` is loaded from `/app/api/app/clients/tools/util/fileSearch.js`,
+so after pulling the V3.1 commit and passing its tests, replace only that
+file in the existing container and restart **just the API**:
+
+```bash
+cd ~/mine-ai
+git pull --ff-only origin mine-development
+cd api
+NODE_ENV=test npx jest --runInBand --coverage=false --watch=false test/app/clients/tools/util/fileSearch.test.js
+cd ..
+C=mine-oss-librechat-api-1
+B="$HOME/mine-kb-file-search-backup-$(date +%Y%m%d-%H%M%S).js"
+docker cp "$C:/app/api/app/clients/tools/util/fileSearch.js" "$B"
+docker cp api/app/clients/tools/util/fileSearch.js "$C:/app/api/app/clients/tools/util/fileSearch.js"
+docker restart "$C"
+for i in {1..20}; do
+  status=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3210/api/knowledge || true)
+  echo "KB API: $status"
+  if [ "$status" = 401 ]; then break; fi
+  sleep 2
+done
+```
+
+A JWT-free request should receive HTTP 401 after startup. If not, restore the
+backed-up `fileSearch.js` and restart the same container. Do not recreate
+Compose services or reset RAG/Mongo volumes.
+
+**Validation:** In a new Research Analyst chat, search a distinctive
+phrase/content from the existing linked document. First prove the expected
+File Search source is returned and cited, then revoke the KB grant and verify
+a subsequent new conversation cannot retrieve it. No-content responses may
+also reflect documents whose embeddings exist only in an old Agent namespace
+or documents containing no relevant passage. This patch cannot silently
+reindex Agent-private sources into a user scope; a dedicated opt-in ingestion
+pipeline is needed for those cases.
