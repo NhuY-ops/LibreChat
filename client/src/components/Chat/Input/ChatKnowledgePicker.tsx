@@ -31,9 +31,9 @@ function parseTags(text: string): string[] | null {
 }
 
 /**
- * V4 (Agent-chat scope): chat-level opt-in narrowing of V3 Agent grants.
- * A saved conversation is required; backend verifies the owner, tenant and
- * Agent grants on every read/write and again before every RAG tool query.
+ * V4.2: saved Agent chat selections narrow V3 grants, while saved regular
+ * chats can explicitly opt into owner-owned KBs. Both are reauthorized at
+ * File Search time. Unsaved chats are not eligible in this phase.
  */
 export default function ChatKnowledgePicker({
   conversationId,
@@ -47,7 +47,7 @@ export default function ChatKnowledgePicker({
   const { user } = useAuthContext();
   const queryClient = useQueryClient();
   const principal = user?.id ?? '';
-  const ready = Boolean(principal && agentId && conversationId &&
+  const ready = Boolean(principal && conversationId &&
     conversationId !== 'new' && conversationId !== '00000000-0000-0000-0000-000000000000');
   const queryKey = ['mineChatKB', principal, conversationId, agentId];
   const query = useQuery<ChatKnowledgeSettings>(
@@ -115,8 +115,6 @@ export default function ChatKnowledgePicker({
     () => Object.values(draft).filter((item) => item.enabled).length,
     [draft],
   );
-  if (!agentId) return null;
-
   const save = async () => {
     if (!ready || pending || !query.data) return;
     const libraries: SelectedLibrary[] = [];
@@ -176,7 +174,7 @@ export default function ChatKnowledgePicker({
               className="text-text-secondary text-xs">Close</button>
           </div>
           <p className="text-text-secondary mt-1 text-xs">
-            Only libraries already granted to this Agent. Changes apply to this chat only.
+            {agentId ? 'Only libraries already granted to this Agent.' : 'Choose your own private Knowledge Bases.'} Changes apply to this chat only.
           </p>
           {query.isLoading ? (
             <p role="status" className="text-text-secondary py-3 text-xs">Loading KBs…</p>
@@ -184,7 +182,7 @@ export default function ChatKnowledgePicker({
             <p role="alert" className="text-text-destructive py-3 text-xs">Could not load Chat KBs.</p>
           ) : !query.data?.available.length ? (
             <p className="text-text-secondary py-3 text-xs">
-              No granted KBs. Enable one in Agent Builder first.
+              {agentId ? 'No granted KBs. Enable one in Agent Builder first.' : 'No private Knowledge Bases found. Create one in Knowledge Bases first.'}
             </p>
           ) : (
             <div className="mt-3 max-h-64 space-y-3 overflow-y-auto">

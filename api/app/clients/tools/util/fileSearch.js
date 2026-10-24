@@ -11,6 +11,7 @@ const { Tools, EToolResources } = require('librechat-data-provider');
 const { filterFilesByAgentAccess } = require('~/server/services/Files/permissions');
 const { getFiles } = require('~/models');
 const { resolveAgentKnowledgeFiles } = require('~/server/services/KnowledgeBase/agentAccess');
+const { resolveChatKnowledgeFiles } = require('~/server/services/KnowledgeBase/chatAccess');
 
 const fileSearchJsonSchema = {
   type: 'object',
@@ -61,15 +62,22 @@ const primeFiles = async (options) => {
 
   dbFiles = dbFiles.concat(resourceFiles);
 
-  // A KB is opt-in, and only the actual owner of both Agent and KB can
-  // retrieve its content. Existing direct File Search attachments are untouched.
-  if (req?.user?.id && agentId) {
-    const kbFiles = await resolveAgentKnowledgeFiles({
-      userId: req.user.id,
-      tenantId: req.user.tenantId,
-      conversationId: req.body?.conversationId,
-      agentId,
-    });
+  // KB selection is opt-in and checked against a saved owner/tenant conversation.
+  // Agents use V3 grants; regular chats require an explicit V4.2 selection.
+  // Existing directly attached files are unchanged.
+  if (req?.user?.id) {
+    const kbFiles = agentId
+      ? await resolveAgentKnowledgeFiles({
+          userId: req.user.id,
+          tenantId: req.user.tenantId,
+          conversationId: req.body?.conversationId,
+          agentId,
+        })
+      : await resolveChatKnowledgeFiles({
+          userId: req.user.id,
+          tenantId: req.user.tenantId,
+          conversationId: req.body?.conversationId,
+        });
     const existingIds = new Set(dbFiles.map((f) => f.file_id));
     for (const file of kbFiles) {
       if (!existingIds.has(file.file_id)) {
@@ -132,12 +140,14 @@ const createFileSearchTool = async ({
       // grant never persists just because a tool was primed earlier in the turn.
       let currentFiles = files;
       if (files.some((f) => f.kbManaged)) {
-        const authorized = await resolveAgentKnowledgeFiles({
-          agentId: entity_id,
-          userId,
-          tenantId,
-          conversationId,
-        });
+        const authorized = entity_id
+          ? await resolveAgentKnowledgeFiles({
+              agentId: entity_id,
+              userId,
+              tenantId,
+              conversationId,
+            })
+          : await resolveChatKnowledgeFiles({ userId, tenantId, conversationId });
         const allowed = new Map(authorized.map((f) => [f.file_id, f]));
         currentFiles = files.flatMap((file) => {
           if (!file.kbManaged) return [file];

@@ -163,6 +163,63 @@ describe('MINE Chat KB V4 routes (restrict existing Agent grants)', () => {
   });
 });
 
+describe('MINE KB V4.2 regular saved chat selection', () => {
+  const route = '/api/knowledge/chat/regular-chat';
+  const selected = [{ kb_id: KB_ID, tags: ['clinical'] }];
+
+  beforeEach(() => {
+    mockConvoFindOne.mockResolvedValue({ agent_id: null });
+  });
+
+  it('shows owned libraries but inherits NO KBs by default', async () => {
+    mockFind.mockResolvedValueOnce([{ ...kb, agent_access: [] }]);
+    const res = await request(app).get(route);
+    expect(res.status).toBe(200);
+    expect(res.body.available[0].kb_id).toBe(KB_ID);
+    expect(res.body.selected).toEqual([]);
+    expect(res.body.inherited).toBe(true);
+    expect(mockFind).toHaveBeenCalledWith({
+      owner: 'owner-a', tenantId: 'team-one',
+    });
+  });
+
+  it('saves user-owned KB selection without granting Agent access', async () => {
+    mockFind.mockResolvedValueOnce([{ _id: KB_ID }]);
+    const res = await request(app).put(route).send({ libraries: selected });
+    expect(res.status).toBe(200);
+    expect(res.body.selected).toEqual(selected);
+    expect(mockChatSelectionUpsert).toHaveBeenCalledWith({
+      owner: 'owner-a', tenantId: 'team-one', conversationId: 'regular-chat',
+      agentId: '__mine_regular_chat__',
+    }, { $set: { libraries: selected } }, expect.objectContaining({ upsert: true }));
+    expect(mockAgentFindOne).not.toHaveBeenCalled();
+  });
+
+  it('does not select KB belonging to another user or tenant', async () => {
+    mockFind.mockResolvedValueOnce([]);
+    const res = await request(app).put(route).send({ libraries: selected });
+    expect(res.status).toBe(403);
+    expect(mockChatSelectionUpsert).not.toHaveBeenCalled();
+  });
+
+  it('rejects unsaved / not-owned regular chat', async () => {
+    mockConvoFindOne.mockResolvedValueOnce(null);
+    const res = await request(app).put(route).send({ libraries: [] });
+    expect(res.status).toBe(404);
+    expect(mockChatSelectionUpsert).not.toHaveBeenCalled();
+  });
+
+  it('loads only selections that still belong to the owner', async () => {
+    mockFind.mockResolvedValueOnce([{ _id: KB_ID, name: 'Research', file_ids: [] }]);
+    mockChatSelectionFindOne.mockResolvedValueOnce({
+      libraries: [...selected, { kb_id: '507f191e810c19729de860ea', tags: [] }],
+    });
+    const res = await request(app).get(route);
+    expect(res.status).toBe(200);
+    expect(res.body.selected).toEqual(selected);
+  });
+});
+
 describe('MINE Knowledge Base management API', () => {
   it('lists only collections scoped to the authenticated owner and tenant', async () => {
     const response = await withUser('/api/knowledge');
