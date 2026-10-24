@@ -140,6 +140,52 @@ describe('fileSearch.js - Knowledge Base runtime grants', () => {
     }
   });
 
+  it('keeps KB source namespaces separate from direct Agent files in one query', async () => {
+    const axios = require('axios');
+    const { generateShortLivedToken } = require('@librechat/api');
+    const prior = process.env.RAG_API_URL;
+    process.env.RAG_API_URL = 'http://localhost:8000';
+    try {
+      resolveAgentKnowledgeFiles.mockResolvedValueOnce([{
+        file_id: 'kb-file', filename: 'old.pdf', kbManaged: true,
+        ragEntityId: 'agent_original',
+      }]);
+      generateShortLivedToken.mockReturnValue('token');
+      axios.post
+        .mockResolvedValueOnce({ data: [[{
+          page_content: 'KB research excerpt',
+          metadata: { source: '/old.pdf' },
+        }, 0.2]] })
+        .mockResolvedValueOnce({ data: [[{
+          page_content: 'Current Agent excerpt',
+          metadata: { source: '/current.pdf' },
+        }, 0.1]] });
+      const tool = await createFileSearchTool({
+        userId: 'owner', tenantId: 'team-a', entity_id: 'agent_current',
+        files: [
+          { file_id: 'kb-file', filename: 'old.pdf', kbManaged: true,
+            fromAgent: true, ragEntityId: 'agent_original' },
+          { file_id: 'current-file', filename: 'current.pdf', fromAgent: true },
+        ],
+        fileCitations: true,
+      });
+      const [content, artifact] = await tool.func({ query: 'research' });
+      expect(content).toContain('KB research excerpt');
+      expect(content).toContain('Current Agent excerpt');
+      expect(artifact.file_search.sources).toHaveLength(2);
+      const bodies = axios.post.mock.calls
+        .filter(([url]) => url.endsWith('/query'))
+        .map(([, body]) => body);
+      expect(bodies).toEqual([
+        { file_id: 'kb-file', query: 'research', k: 5, entity_id: 'agent_original' },
+        { file_id: 'current-file', query: 'research', k: 5, entity_id: 'agent_current' },
+      ]);
+    } finally {
+      if (prior == null) delete process.env.RAG_API_URL;
+      else process.env.RAG_API_URL = prior;
+    }
+  });
+
   it('drops a KB file when source-namespace authorization is revoked mid-turn', async () => {
     const { generateShortLivedToken } = require('@librechat/api');
     const searchTool = await createFileSearchTool({
