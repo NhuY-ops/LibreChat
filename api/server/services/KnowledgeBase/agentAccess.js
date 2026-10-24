@@ -61,16 +61,44 @@ async function resolveAgentKnowledgeFiles({ agentId, userId, tenantId }) {
       file_id: { $in: permitted },
       embedded: true,
       $or: [{ expiredAt: null }, { expiredAt: { $gt: new Date() } }],
-    }).select('file_id filename user').lean();
+    }).select('file_id filename user context metadata.embeddedEntities').lean();
     const ownedById = new Map(files.map((f) => [f.file_id, f]));
-    return permitted
-      .filter((id) => ownedById.has(id))
-      .map((id) => ({
+    // Files originally uploaded to another Agent live in that Agent's vector
+    // namespace. Never trust metadata alone as authorization: verify the
+    // namespace belongs to an Agent with the same owner AND tenant.
+    const sourceAgentIds = [...new Set(files
+      .filter((file) => file.context === 'agents')
+      .flatMap((file) => file.metadata?.embeddedEntities ?? [])
+      .filter((id) => typeof id === 'string' && /^agent_[a-zA-Z0-9_-]{1,150}$/.test(id)))];
+    const ownedSourceIds = new Set();
+    if (sourceAgentIds.length) {
+      const sourceAgents = await Agent.find({
+        id: { $in: sourceAgentIds },
+        author: scope.owner,
+        tenantId: scope.tenantId,
+      }).select('id').lean();
+      for (const source of sourceAgents) ownedSourceIds.add(source.id);
+    }
+    return permitted.flatMap((id) => {
+      const file = ownedById.get(id);
+      if (!file) return [];
+      let ragEntityId;
+      if (file.context === 'agents') {
+        // Fail closed if the original Agent was removed or belongs to anyone
+        // else. A stale or foreign namespace must never be guessed/fallback.
+        ragEntityId = (file.metadata?.embeddedEntities ?? []).find((sourceId) =>
+          ownedSourceIds.has(sourceId),
+        );
+        if (!ragEntityId) return [];
+      }
+      return [{
         file_id: id,
-        filename: ownedById.get(id).filename,
-        user: ownedById.get(id).user,
+        filename: file.filename,
+        user: file.user,
         kbManaged: true,
-      }));
+        ...(ragEntityId ? { ragEntityId } : {}),
+      }];
+    });
   } catch (error) {
     logger.error('[MINE KB] Agent document grant resolution failed', error);
     return [];
