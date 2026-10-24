@@ -65,7 +65,9 @@ export default function ChatKnowledgePicker({
       setDraft({});
       return;
     }
-    const selected = new Map(data.selected.map((entry) => [entry.kb_id, entry.tags]));
+    const selected = new Map<string, string[]>(
+      data.selected.map((entry): [string, string[]] => [entry.kb_id, entry.tags]),
+    );
     setDraft(Object.fromEntries(data.available.map((kb) => [
       kb.kb_id,
       { enabled: selected.has(kb.kb_id), tags: (selected.get(kb.kb_id) ?? []).join(', ') },
