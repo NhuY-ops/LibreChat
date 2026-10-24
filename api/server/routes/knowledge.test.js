@@ -128,7 +128,7 @@ describe('MINE Knowledge Base management API', () => {
     const response = await withUser('/api/knowledge/' + KB_ID + '/files');
     expect(response.status).toBe(200);
     expect(response.body).toEqual([
-      { file_id: FILE_ID, filename: 'notes.pdf', type: 'application/pdf', bytes: 12 },
+      { file_id: FILE_ID, filename: 'notes.pdf', type: 'application/pdf', bytes: 12, tags: [] },
     ]);
     expect(mockFileFind).toHaveBeenCalledWith(expect.objectContaining({
       user: 'owner-a', tenantId: 'team-one', embedded: true,
