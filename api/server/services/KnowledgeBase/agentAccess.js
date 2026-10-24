@@ -34,7 +34,11 @@ function grantedFileIds(libraries, agentId) {
  */
 async function resolveAgentKnowledgeFiles({ agentId, userId, tenantId }) {
   if (typeof agentId !== 'string' || !agentId.startsWith('agent_') || !userId) return [];
-  const scopedTenant = tenantId ?? getTenantId() ?? null;
+  const requestTenant = getTenantId() ?? null;
+  // If a propagated tenant differs from the request user tenant, deny rather
+  // than trusting either one and risking a cross-tenant KB lookup.
+  if (requestTenant && tenantId && requestTenant !== tenantId) return [];
+  const scopedTenant = requestTenant ?? tenantId ?? null;
   if (scopedTenant === SYSTEM_TENANT_ID ||
       (process.env.TENANT_ISOLATION_STRICT === 'true' && !scopedTenant)) return [];
   const scope = { owner: String(userId), tenantId: scopedTenant };
