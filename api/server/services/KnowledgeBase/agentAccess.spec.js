@@ -86,6 +86,13 @@ describe('Agent KB retrieval (fail closed)', () => {
       else process.env.TENANT_ISOLATION_STRICT = before;
     }
   });
+  it('denies mismatched authenticated and request tenant contexts', async () => {
+    tenant.mockReturnValue('team-b');
+    expect(await resolveAgentKnowledgeFiles({
+      agentId: 'agent_test', userId: 'user-a', tenantId: 'team-a',
+    })).toEqual([]);
+    expect(agentFind).not.toHaveBeenCalled();
+  });
   it('denies DB failures', async () => {
     kbFind.mockRejectedValueOnce(new Error('network'));
     expect(await resolveAgentKnowledgeFiles(params)).toEqual([]);
