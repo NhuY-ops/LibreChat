@@ -97,3 +97,93 @@ entry-point patch, but `docker compose up --force-recreate` using the stock imag
 would discard it. Avoid deleting volumes or restoring older KB files over newer ones.
 A durable custom API image/source-backed development mount is recommended before
 further feature iterations.
+
+## MINE Knowledge Base V3: opt-in Agent File Search
+
+The Agent Builder now includes **Knowledge Base Access** for saved Agents. It lists
+the owner's private KBs, each disabled by default. Enable individual KBs;
+leave tags blank for all linked documents, or use a comma-separated list
+such as `immunology, research` for **ANY** tag matching.
+
+The grant is saved directly to `MineKnowledgeBase.agent_access`. It is **not**
+an Agent field and does not modify the existing Agent form/attachments.
+Only the owner of both the KB and Agent can create or revoke a grant.
+Shared Agents never automatically inherit another user's KB.
+
+When the Agent has the built-in **File Search** tool enabled:
+- `primeFiles` resolves selected KBs against owner/tenant/Agent, validates
+  that each file remains linked, owned, embedded and unexpired.
+- The tool rechecks KB grants immediately before each search query, so revocation,
+  unlinking a file, or editing tags takes effect for subsequent tool calls.
+- Existing directly uploaded Agent files remain unchanged, including when KB
+  grants are revoked. File Search still has its original permission checks.
+- RAG citations still follow the existing File Search implementation.
+- Without File Search selected, granting KB access does **not** cause the model
+  to search autonomously. This version does not add KB access to ordinary chats.
+
+**Scope:** Existing private owner KBs only; no Team access, no shared-agent
+KB propagation, no connector sync. API `PUT /api/knowledge/:id/agent-access/:agentId`
+accepts `{ enabled: boolean, tags: string[] }`; omission or `enabled:false` means
+no access. The GET KB collection list includes `agent_access` only to its owner.
+
+### Test from the checked-out MINE repository
+
+```bash
+cd ~/mine-ai
+git pull --ff-only origin mine-development
+
+cd api
+NODE_ENV=test npx jest --runInBand --coverage=false --watch=false server/routes/knowledge.test.js
+NODE_ENV=test npx jest --runInBand --coverage=false --watch=false server/services/KnowledgeBase/agentAccess.spec.js
+NODE_ENV=test npx jest --runInBand --coverage=false --watch=false test/app/clients/tools/util/fileSearch.test.js
+
+cd ../client
+npm run typecheck
+```
+
+### Update the existing development-only Docker hotpatch
+
+**Only after tests pass.** This user's actual backend runs as
+`mine-oss-librechat-api-1` on host port 3210 under a separate Compose
+project. Its `/app/api/server/index.js` already registers `/api/knowledge`;
+do not override that entry point or recreate the stock image.
+
+```bash
+cd ~/mine-ai
+C=mine-oss-librechat-api-1
+BACKUP="$HOME/mine-kb-v3-backups/$(date +%Y%m%d-%H%M%S)"
+mkdir -p "$BACKUP"
+
+for FILE in \
+  api/server/routes/knowledge.js \
+  api/server/services/KnowledgeBase/model.js \
+  api/app/clients/tools/util/fileSearch.js \
+  api/app/clients/tools/util/handleTools.js
+do
+  mkdir -p "$BACKUP/$(dirname "$FILE")"
+  docker cp "$C:/app/$FILE" "$BACKUP/$FILE"
+done
+
+docker cp api/server/routes/knowledge.js "$C:/app/api/server/routes/knowledge.js"
+docker cp api/server/services/KnowledgeBase/model.js "$C:/app/api/server/services/KnowledgeBase/model.js"
+docker cp api/server/services/KnowledgeBase/agentAccess.js "$C:/app/api/server/services/KnowledgeBase/agentAccess.js"
+docker cp api/app/clients/tools/util/fileSearch.js "$C:/app/api/app/clients/tools/util/fileSearch.js"
+docker cp api/app/clients/tools/util/handleTools.js "$C:/app/api/app/clients/tools/util/handleTools.js"
+docker restart "$C"
+
+curl -sS -o /dev/null -w 'KB API HTTP: %{http_code}\n' http://localhost:3210/api/knowledge
+```
+
+Expected unauthenticated result is HTTP **401**. A 500 or a restarting API
+should be investigated before using the Agent; the four saved originals in
+`$BACKUP` support rollback, followed by `docker restart "$C"`.
+Do not remove MongoDB/RAG volumes or reset agent data. For production, replace
+this hotpatch with a source-built API image and immutable versioned deployment.
+
+Test in the UI: open the saved Agent's Builder, enable **File Search**,
+enable `medical research` under **Knowledge Base Access** and optionally
+set the `immunology` tag. Save the grant and ask the Agent a question
+that can only be answered by a permitted KB file. Then disable that KB
+and ask again in a *new* conversation; the Agent must no longer retrieve
+that KB, though knowledge disclosed in earlier chat messages can remain
+in conversational context.
