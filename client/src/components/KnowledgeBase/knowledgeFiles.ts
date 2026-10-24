@@ -13,3 +13,8 @@ export function filterIndexedFiles(files: readonly TFile[], query = ''): TFile[]
       (!search || (file.filename ?? '').toLocaleLowerCase().includes(search)),
   );
 }
+
+/** Format one KB association tag consistently with the server API. */
+export function normalizeKnowledgeTag(value: string): string {
+  return value.normalize('NFKC').trim().toLowerCase();
+}
