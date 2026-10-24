@@ -3,6 +3,7 @@ const mockSourceAgentsFind = jest.fn();
 const mockKbFind = jest.fn();
 const mockFileFind = jest.fn();
 const mockTenant = jest.fn();
+const mockChatSelectionFindOne = jest.fn();
 jest.mock('@librechat/data-schemas', () => ({
   getTenantId: () => mockTenant(),
   SYSTEM_TENANT_ID: '__SYSTEM__',
@@ -18,6 +19,9 @@ jest.mock('~/db/models', () => ({
 jest.mock('./model', () => ({
   find: (...a) => ({ select: () => ({ lean: () => mockKbFind(...a) }) }),
 }));
+jest.mock('./chatSelection', () => ({
+  findOne: (...a) => ({ lean: () => mockChatSelectionFindOne(...a) }),
+}));
 const { grantedFileIds, resolveAgentKnowledgeFiles } = require('./agentAccess');
 
 beforeEach(() => {
@@ -27,6 +31,7 @@ beforeEach(() => {
   mockSourceAgentsFind.mockResolvedValue([]);
   mockKbFind.mockResolvedValue([]);
   mockFileFind.mockResolvedValue([]);
+  mockChatSelectionFindOne.mockResolvedValue(null);
 });
 describe('Agent KB retrieval (fail closed)', () => {
   const params = { agentId: 'agent_test', userId: 'user-a', tenantId: 'team-a' };
@@ -50,6 +55,53 @@ describe('Agent KB retrieval (fail closed)', () => {
       { file_ids: ['b', 'c'], agent_access: [{ agent_id: params.agentId, tags: [] }] },
     ], params.agentId)).toEqual(['a', 'b', 'c']);
   });
+  it('narrows permitted files to selected chat libraries and tags', () => {
+    const libraries = [
+      {
+        _id: 'library-1', file_ids: ['a', 'b'],
+        agent_access: [{ agent_id: 'agent_test', tags: [] }],
+        file_tags: [{ file_id: 'a', tags: ['immunology'] }, { file_id: 'b', tags: ['history'] }],
+      },
+      {
+        _id: 'library-2', file_ids: ['c'],
+        agent_access: [{ agent_id: 'agent_test', tags: [] }],
+      },
+    ];
+    expect(grantedFileIds(libraries, 'agent_test', {
+      libraries: [{ kb_id: 'library-1', tags: ['immunology'] }],
+    })).toEqual(['a']);
+    expect(grantedFileIds(libraries, 'agent_test', { libraries: [] })).toEqual([]);
+    expect(grantedFileIds(libraries, 'agent_test', null)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('never expands restrictive Agent tags via a broader chat filter', () => {
+    expect(grantedFileIds([{
+      _id: 'library-1', file_ids: ['immune', 'history'],
+      agent_access: [{ agent_id: 'agent_test', tags: ['immunology'] }],
+      file_tags: [
+        { file_id: 'immune', tags: ['immunology', 'clinical'] },
+        { file_id: 'history', tags: ['clinical'] },
+      ],
+    }], 'agent_test', { libraries: [{ kb_id: 'library-1', tags: ['clinical'] }] }))
+      .toEqual(['immune']);
+  });
+
+  it('reads chat-specific disabled selection on each authorization request', async () => {
+    mockKbFind.mockResolvedValueOnce([
+      { _id: 'library-1', file_ids: ['a'],
+        agent_access: [{ agent_id: 'agent_test', tags: [] }] },
+    ]);
+    mockChatSelectionFindOne.mockResolvedValueOnce({ libraries: [] });
+    expect(await resolveAgentKnowledgeFiles({
+      agentId: 'agent_test', userId: 'user-a', tenantId: 'team-a',
+      conversationId: 'chat-123',
+    })).toEqual([]);
+    expect(mockChatSelectionFindOne).toHaveBeenCalledWith({
+      owner: 'user-a', tenantId: 'team-a', conversationId: 'chat-123', agentId: 'agent_test',
+    });
+    expect(mockFileFind).not.toHaveBeenCalled();
+  });
+
   it('rejects shared Agents rather than inheriting grants', async () => {
     mockAgentFind.mockResolvedValueOnce(null);
     expect(await resolveAgentKnowledgeFiles(params)).toEqual([]);
