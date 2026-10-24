@@ -54,11 +54,46 @@ describe('fileSearch.js - Knowledge Base runtime grants', () => {
       tool_resources: { file_search: { file_ids: [] } },
     });
     expect(result.files).toEqual([
-      { file_id: 'kb-file', filename: 'immune.pdf', fromAgent: true, kbManaged: true },
+      { file_id: 'kb-file', filename: 'immune.pdf', fromAgent: false, kbManaged: true },
     ]);
     expect(resolveAgentKnowledgeFiles).toHaveBeenCalledWith({
       userId: 'owner', tenantId: 'team-a', agentId: 'agent_owner',
     });
+  });
+
+  it('searches KB-linked files in the user namespace without an Agent entity_id', async () => {
+    const axios = require('axios');
+    const { generateShortLivedToken } = require('@librechat/api');
+    const prior = process.env.RAG_API_URL;
+    process.env.RAG_API_URL = 'http://localhost:8000';
+    try {
+      resolveAgentKnowledgeFiles.mockResolvedValue([
+        { file_id: 'kb-file', filename: 'immune.pdf', kbManaged: true },
+      ]);
+      const primed = await primeFiles({
+        req: { user: { id: 'owner', role: 'USER', tenantId: 'team-a' } },
+        agentId: 'agent_owner',
+        tool_resources: { file_search: { file_ids: [] } },
+      });
+      generateShortLivedToken.mockReturnValue('mock-jwt');
+      axios.post.mockResolvedValueOnce({
+        data: [[{ page_content: 'A user-indexed passage', metadata: { source: '/immune.pdf' } }, 0.2]],
+      });
+      const searchTool = await createFileSearchTool({
+        userId: 'owner',
+        tenantId: 'team-a',
+        entity_id: 'agent_owner',
+        files: primed.files,
+      });
+      const [text, artifact] = await searchTool.func({ query: 'immune response' });
+      const body = axios.post.mock.calls.find(([url]) => url.endsWith('/query'))?.[1];
+      expect(body).toEqual({ file_id: 'kb-file', query: 'immune response', k: 5 });
+      expect(text).toContain('A user-indexed passage');
+      expect(artifact.file_search.sources[0].fileId).toBe('kb-file');
+    } finally {
+      if (prior === undefined) delete process.env.RAG_API_URL;
+      else process.env.RAG_API_URL = prior;
+    }
   });
 
   it('does not expose KB files after grant revocation between priming and retrieval', async () => {
