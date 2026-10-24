@@ -220,7 +220,7 @@ describe('MINE Knowledge Base management API', () => {
       .send({ tags: [' Immunology ', 'research', 'immunology'] });
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ file_id: FILE_ID, tags: ['immunology', 'research'] });
-    expect(mockFindOneAndUpdate.mock.calls[0][1][0].$set.file_tags.$concatArrays[0].$filter.cond.$ne[0]).toBe('$entry.file_id');
+    expect(mockFindOneAndUpdate.mock.calls[0][1][0].$set.file_tags.$concatArrays[0].$filter.cond.$ne[0]).toBe('$$entry.file_id');
     expect(mockFindOneAndUpdate).toHaveBeenCalledWith(
       { owner: 'owner-a', tenantId: 'team-one', _id: KB_ID, file_ids: FILE_ID },
       expect.arrayContaining([expect.objectContaining({ $set: expect.any(Object) })]),
@@ -274,7 +274,7 @@ describe('MINE Knowledge Base management API', () => {
     expect(response.body).toEqual({ enabled: true, tags: ['immunology', 'research'] });
     const [filter, pipeline] = mockFindOneAndUpdate.mock.calls[0];
     expect(filter).toEqual({ _id: KB_ID, owner: 'owner-a', tenantId: 'team-one' });
-    expect(pipeline[0].$set.agent_access.$concatArrays[0].$filter.cond.$ne[0]).toBe('$grant.agent_id');
+    expect(pipeline[0].$set.agent_access.$concatArrays[0].$filter.cond.$ne[0]).toBe('$$grant.agent_id');
     expect(pipeline[0].$set.agent_access.$concatArrays[1]).toEqual({
       $literal: [{ agent_id: 'agent_abc123', tags: ['immunology', 'research'] }],
     });
