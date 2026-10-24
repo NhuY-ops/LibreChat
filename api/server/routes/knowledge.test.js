@@ -10,6 +10,7 @@ const mockFindOneAndUpdate = jest.fn();
 const mockFindOneAndDelete = jest.fn();
 const mockFileFindOne = jest.fn();
 const mockFileFind = jest.fn();
+const mockAgentFindOne = jest.fn();
 
 jest.mock('@librechat/data-schemas', () => ({
   getTenantId: () => mockGetTenantId(),
@@ -20,6 +21,9 @@ jest.mock('~/server/middleware', () => ({
   requireJwtAuth: (req, _res, next) => next(),
 }));
 jest.mock('~/db/models', () => ({
+  Agent: {
+    findOne: (...args) => ({ select: () => ({ lean: () => mockAgentFindOne(...args) }) }),
+  },
   File: {
     findOne: (...args) => ({
       select: () => ({ lean: () => mockFileFindOne(...args) }),
@@ -64,6 +68,7 @@ beforeEach(() => {
   mockFindOneAndDelete.mockResolvedValue(kb);
   mockFileFindOne.mockResolvedValue({ _id: 'file-mongo-id' });
   mockFileFind.mockResolvedValue([]);
+  mockAgentFindOne.mockResolvedValue({ _id: 'valid-agent' });
 });
 
 describe('MINE Knowledge Base management API', () => {
@@ -233,6 +238,68 @@ describe('MINE Knowledge Base management API', () => {
     const pipeline = mockFindOneAndUpdate.mock.calls[0][1];
     expect(pipeline[0].$set.file_tags.$concatArrays).toHaveLength(2);
     expect(pipeline[0].$set.file_tags.$concatArrays[1]).toEqual({ $literal: [] });
+  });
+
+  it('does not grant access to a non-owned Agent', async () => {
+    mockAgentFindOne.mockResolvedValueOnce(null);
+    const response = await request(app)
+      .put('/api/knowledge/' + KB_ID + '/agent-access/agent_abc123')
+      .send({ enabled: true, tags: ['immunology'] });
+    expect(response.status).toBe(404);
+    expect(mockAgentFindOne).toHaveBeenCalledWith({
+      id: 'agent_abc123', author: 'owner-a', tenantId: 'team-one',
+    });
+    expect(mockFindOneAndUpdate).not.toHaveBeenCalled();
+  });
+
+  it('does not grant access to an unknown or other-owner KB', async () => {
+    mockFindOne.mockResolvedValueOnce(null);
+    const response = await request(app)
+      .put('/api/knowledge/' + KB_ID + '/agent-access/agent_abc123')
+      .send({ enabled: true, tags: [] });
+    expect(response.status).toBe(404);
+    expect(mockFindOneAndUpdate).not.toHaveBeenCalled();
+  });
+
+  it('saves an explicit KB grant with normalized OR tags and a scoped update', async () => {
+    mockFindOneAndUpdate.mockResolvedValueOnce({
+      ...kb,
+      agent_access: [{ agent_id: 'agent_abc123', tags: ['immunology', 'research'] }],
+    });
+    const response = await request(app)
+      .put('/api/knowledge/' + KB_ID + '/agent-access/agent_abc123')
+      .send({ enabled: true, tags: ['Immunology', 'research', 'immunology'] });
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ enabled: true, tags: ['immunology', 'research'] });
+    const [filter, pipeline] = mockFindOneAndUpdate.mock.calls[0];
+    expect(filter).toEqual({ _id: KB_ID, owner: 'owner-a', tenantId: 'team-one' });
+    expect(pipeline[0].$set.agent_access.$concatArrays[1]).toEqual({
+      $literal: [{ agent_id: 'agent_abc123', tags: ['immunology', 'research'] }],
+    });
+  });
+
+  it('revokes access by atomically dropping the Agent grant', async () => {
+    mockFindOneAndUpdate.mockResolvedValueOnce({ ...kb, agent_access: [] });
+    const response = await request(app)
+      .put('/api/knowledge/' + KB_ID + '/agent-access/agent_abc123')
+      .send({ enabled: false, tags: [] });
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ enabled: false, tags: [] });
+    expect(mockFindOneAndUpdate.mock.calls[0][1][0].$set.agent_access.$concatArrays[1])
+      .toEqual({ $literal: [] });
+  });
+
+  it('rejects an invalid Agent ID or invalid grant request before DB access', async () => {
+    const responses = await Promise.all([
+      request(app).put('/api/knowledge/' + KB_ID + '/agent-access/not-an-agent')
+        .send({ enabled: true, tags: [] }),
+      request(app).put('/api/knowledge/' + KB_ID + '/agent-access/agent_abc123')
+        .send({ enabled: 'yes', tags: [] }),
+      request(app).put('/api/knowledge/' + KB_ID + '/agent-access/agent_abc123')
+        .send({ enabled: false, tags: ['immunology'] }),
+    ]);
+    responses.forEach((result) => expect(result.status).toBe(400));
+    expect(mockAgentFindOne).not.toHaveBeenCalled();
   });
 
   it('removes association and leaves the original RAG file intact', async () => {
