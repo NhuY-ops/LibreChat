@@ -57,7 +57,35 @@ describe('fileSearch.js - Knowledge Base runtime grants', () => {
       { file_id: 'kb-file', filename: 'immune.pdf', fromAgent: false, kbManaged: true },
     ]);
     expect(resolveAgentKnowledgeFiles).toHaveBeenCalledWith({
-      userId: 'owner', tenantId: 'team-a', agentId: 'agent_owner',
+      userId: 'owner', tenantId: 'team-a', conversationId: undefined, agentId: 'agent_owner',
+    });
+  });
+
+  it('passes the real conversation ID at priming and reauthorization time', async () => {
+    const { resolveAgentKnowledgeFiles } = require('~/server/services/KnowledgeBase/agentAccess');
+    resolveAgentKnowledgeFiles.mockResolvedValue([
+      { file_id: 'scoped', filename: 'scoped.txt', kbManaged: true },
+    ]);
+    const primed = await primeFiles({
+      req: { user: { id: 'owner', role: 'USER', tenantId: 'team-a' },
+        body: { conversationId: 'chat-123' } },
+      agentId: 'agent_owner',
+      tool_resources: { file_search: { file_ids: [] } },
+    });
+    expect(resolveAgentKnowledgeFiles).toHaveBeenCalledWith({
+      userId: 'owner', tenantId: 'team-a',
+      conversationId: 'chat-123', agentId: 'agent_owner',
+    });
+    const { generateShortLivedToken } = require('@librechat/api');
+    generateShortLivedToken.mockReturnValue(null);
+    const tool = await createFileSearchTool({
+      userId: 'owner', tenantId: 'team-a', conversationId: 'chat-123',
+      entity_id: 'agent_owner', files: primed.files,
+    });
+    await tool.func({ query: 'study' });
+    expect(resolveAgentKnowledgeFiles).toHaveBeenLastCalledWith({
+      agentId: 'agent_owner', userId: 'owner', tenantId: 'team-a',
+      conversationId: 'chat-123',
     });
   });
 
