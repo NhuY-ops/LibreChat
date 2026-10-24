@@ -10,6 +10,9 @@
 - The backend checks ownership, tenant, embedded state and expiration for every file attachment. It rechecks those conditions before returning file metadata.
 - Collections are metadata only: they do **not** grant any new agent/chat retrieval permissions. Existing Research Analyst, Skills, File Search and the RAG data pipeline are unchanged.
 - Same-name uploaded files remain distinct by `file_id` (do not deduplicate by filename).
+- **KB-scoped document tags:** add/remove up to 10 tags (32 characters each) for a document association within a selected KB; Unicode NFKC/trim/lowercase normalization. Tags persist in MongoDB and are returned only after original document access is revalidated.
+- Removing a document link also removes that KB association's tags; the underlying file and embeddings remain untouched.
+- Tags are organizational metadata only: they do **not** currently filter retrieval or grant Agent/Chat access. The same file can have different tags inside different KBs.
 
 ## Backend API (authenticated)
 
@@ -20,6 +23,7 @@
 - `GET /api/knowledge/:id/files` — list current-user-accessible linked metadata
 - `POST /api/knowledge/:id/files` — attach previously indexed user-owned file, body `{ file_id }`
 - `DELETE /api/knowledge/:id/files/:fileId` — unlink file only
+- `PATCH /api/knowledge/:id/files/:fileId/tags` — replace per-KB tags after owner/tenant/linked-file checks, body: `{ tags: string[] }`
 
 Limits: 100 KBs per user for the first iteration; 250 file references per KB.
 The 100-KB check is currently a preflight count, not a transactional hard quota; enforce atomically before offering multi-tenant paid plans.
@@ -57,8 +61,39 @@ Once the updated API is serving, open `http://localhost:3090/knowledge`, create 
 ## Next phase, NOT included here
 
 - Direct file upload and embedding initiated on the KB page
-- KB tags, auto-sync, external connectors (Drive, Notion, GitHub, web)
+- Tag-based retrieval authorization, auto-sync, external connectors (Drive, Notion, GitHub, web)
 - Agent/Chat KB access with server-enforced retrieval authorization and citations
 - Shared Teams/Project KB and ACL roles
 
 Do **not** retrofit KB membership into the current File Search authorization until dedicated cross-tenant retrieval and access tests are complete.
+
+## MINE KB V2.1 tags on the existing development container
+
+The user's running backend is `mine-oss-librechat-api-1` from the separate
+`mine-oss-librechat` Compose project in `~/Developer/MINE-OSS-Playground/config/librechat`,
+not the default Compose project in `~/mine-ai`.
+
+Its API entry point was already patched for `/api/knowledge` and tested with HTTP 401
+for an unauthenticated call. To update **only** the KB files with tags after pulling:
+
+```bash
+cd ~/mine-ai
+git pull --ff-only origin mine-development
+
+cd api
+NODE_ENV=test npx jest --runInBand --coverage=false --watch=false server/routes/knowledge.test.js
+cd ../client
+npm run typecheck
+NODE_ENV=development npx jest --runInBand --coverage=false --watch=false src/components/KnowledgeBase/knowledgeFiles.spec.ts
+cd ..
+
+docker cp api/server/routes/knowledge.js mine-oss-librechat-api-1:/app/api/server/routes/knowledge.js
+docker cp api/server/services/KnowledgeBase/model.js mine-oss-librechat-api-1:/app/api/server/services/KnowledgeBase/model.js
+docker restart mine-oss-librechat-api-1
+```
+
+This is a development-only hotpatch: `docker restart` retains the in-container
+entry-point patch, but `docker compose up --force-recreate` using the stock image
+would discard it. Avoid deleting volumes or restoring older KB files over newer ones.
+A durable custom API image/source-backed development mount is recommended before
+further feature iterations.
