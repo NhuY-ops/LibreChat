@@ -425,7 +425,7 @@ function Bar({
             anchorRef={anchorRef}
           />
         </span>
-        {agentId && (
+        {(agentId || showTools) && (
           <ChatKnowledgePicker
             conversationId={conversationId}
             agentId={agentId}
