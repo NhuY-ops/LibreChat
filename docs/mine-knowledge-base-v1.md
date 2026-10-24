@@ -237,3 +237,85 @@ also reflect documents whose embeddings exist only in an old Agent namespace
 or documents containing no relevant passage. This patch cannot silently
 reindex Agent-private sources into a user scope; a dedicated opt-in ingestion
 pipeline is needed for those cases.
+
+## MINE KB V3.2 — verified legacy Agent RAG provenance (2026-10-24)
+
+Confirmed on the user's read-only MongoDB diagnostic: `medical research` links
+to a file with `context: agents`, `embedded: true`, and an original vector
+namespace belonging to the same user's **Research Analyst V1**. The current
+recipient is a separate **Research Analyst V1 (10/21/26, 07:55)**.
+
+V3.1 incorrectly assumed every KB file was user-indexed and omitted
+`entity_id`; HTTP 200 with no vector hits was therefore possible.
+
+V3.2 now loads `metadata.embeddedEntities` only for a KB-linked, owned,
+unexpired, embedded File, validates the referenced source Agent's owner and
+tenant against the KB owner, and uses the verified source Agent's namespace
+for RAG requests. Source Agent IDs are never returned to the KB UI. Missing
+or foreign sources are excluded (fail closed); ordinary user-indexed KB
+files remain user-scoped. The recipient Agent's own resources retain their
+existing namespace. Mixed scopes perform separate queries with combined
+results/citation offsets. Grant and provenance are **re-evaluated before
+every File Search tool call**, preserving immediate revocation semantics.
+
+The Agent grant update also fixes MongoDB aggregation variable references:
+`$$grant.agent_id` and `$$entry.file_id`. These corrections prevent
+subsequent duplicate associations, but **do not remove existing duplicates**
+until the owner explicitly saves/replaces a grant again.
+
+### Test this version before touching Docker
+
+```bash
+cd ~/mine-ai
+git pull --ff-only origin mine-development
+cd api
+NODE_ENV=test npx jest --runInBand --coverage=false --watch=false \
+  server/routes/knowledge.test.js \
+  server/services/KnowledgeBase/agentAccess.spec.js \
+  test/app/clients/tools/util/fileSearch.test.js
+cd ..
+```
+
+Do not deploy if any test fails. Tests for original namespaces, mismatched
+owners/tenants, revocation, mixed namespaces and atomic grants are included.
+
+### Minimal development-container deployment after PASS
+
+The real app container is `mine-oss-librechat-api-1` under a different Docker
+Compose project than the repository's default. The API entry point for KB has
+already been hotpatched inside that container. Keep it and its volumes
+unchanged. After tests pass:
+
+```bash
+cd ~/mine-ai
+C=mine-oss-librechat-api-1
+B="$HOME/mine-kb-v32-backup-$(date +%Y%m%d-%H%M%S)"
+mkdir -p "$B/api/server/routes" "$B/api/server/services/KnowledgeBase" "$B/api/app/clients/tools/util"
+for f in \
+  api/server/routes/knowledge.js \
+  api/server/services/KnowledgeBase/agentAccess.js \
+  api/app/clients/tools/util/fileSearch.js
+do
+  docker cp "$C:/app/$f" "$B/$f" || exit 1
+done
+for f in \
+  api/server/routes/knowledge.js \
+  api/server/services/KnowledgeBase/agentAccess.js \
+  api/app/clients/tools/util/fileSearch.js
+do
+  docker cp "$f" "$C:/app/$f" || exit 1
+done
+docker restart "$C"
+```
+
+Use `curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3210/api/knowledge`
+after restart, retrying for startup. Unauthenticated HTTP 401 is expected.
+Only a real File Search result with an original passage/citation establishes
+successful end-to-end retrieval. The backend source change under
+`packages/api/src/files/rag/search.ts` supports future rebuilds; this
+development hotpatch uses the existing compiled package API and does not
+require deploying TypeScript directly.
+
+Rollback by copying the same 3 files from the timestamped backup and restarting
+API. Never delete DB/RAG volumes or re-embed/delete the user's documents
+without explicit permission.
