@@ -18,6 +18,17 @@ describe('filterIndexedFiles', () => {
     expect(files).toHaveLength(4);
   });
 
+  it('preserves two indexed uploads with the same filename but different file IDs', () => {
+    const duplicates = [
+      { file_id: 'first-file', filename: 'research.txt', embedded: true },
+      { file_id: 'second-file', filename: 'research.txt', embedded: true },
+    ] as TFile[];
+    expect(filterIndexedFiles(duplicates).map((file) => file.file_id)).toEqual([
+      'first-file',
+      'second-file',
+    ]);
+  });
+
   it('returns an empty list for unknown queries', () => {
     expect(filterIndexedFiles(files, 'missing')).toEqual([]);
   });
