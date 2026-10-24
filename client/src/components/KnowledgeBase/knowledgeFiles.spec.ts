@@ -1,5 +1,5 @@
 import type { TFile } from 'librechat-data-provider';
-import { filterIndexedFiles } from './knowledgeFiles';
+import { filterIndexedFiles, normalizeKnowledgeTag } from './knowledgeFiles';
 
 describe('filterIndexedFiles', () => {
   const files = [
@@ -31,5 +31,13 @@ describe('filterIndexedFiles', () => {
 
   it('returns an empty list for unknown queries', () => {
     expect(filterIndexedFiles(files, 'missing')).toEqual([]);
+  });
+});
+
+describe('normalizeKnowledgeTag', () => {
+  it('normalizes whitespace, case, and Unicode', () => {
+    expect(normalizeKnowledgeTag('  Medical Research  ')).toBe('medical research');
+    expect(normalizeKnowledgeTag(' Miễn dịch ')).toBe('miễn dịch');
+    expect(normalizeKnowledgeTag('Ｆｉｌｅ')).toBe('file');
   });
 });
