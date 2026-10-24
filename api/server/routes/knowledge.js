@@ -1,7 +1,7 @@
 const express = require('express');
 const { getTenantId, SYSTEM_TENANT_ID, logger } = require('@librechat/data-schemas');
 const { requireJwtAuth } = require('~/server/middleware');
-const { File } = require('~/db/models');
+const { File, Agent } = require('~/db/models');
 const KnowledgeBase = require('~/server/services/KnowledgeBase/model');
 
 const router = express.Router();
@@ -68,6 +68,7 @@ function serialize(item) {
     name: doc.name,
     description: doc.description ?? '',
     file_ids: doc.file_ids ?? [],
+    agent_access: doc.agent_access ?? [],
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
   };
@@ -106,6 +107,54 @@ router.post('/', async (req, res) => {
       description: description?.trim() ?? '',
     });
     return res.status(201).json(serialize(created));
+  } catch (error) {
+    return failed(res, error);
+  }
+});
+
+/**
+ * A KB grant may only be added by its owner, for an Agent the same owner authored.
+ * There is no "all" grant to implicit/future KBs. Revocation is independent
+ * from file attachments and does not mutate the Agent's own File Search files.
+ */
+router.put('/:id/agent-access/:agentId', async (req, res) => {
+  const scope = requestScope(req, res);
+  if (!scope) return;
+  const { id, agentId } = req.params;
+  if (!validId(id) || !/^agent_[a-zA-Z0-9_-]{1,150}$/.test(agentId ?? '')) {
+    return res.status(400).json({ error: 'Invalid Knowledge Base or Agent ID.' });
+  }
+  const enabled = req.body?.enabled;
+  const tags = normalizeTags(req.body?.tags ?? []);
+  if (typeof enabled !== 'boolean' || tags === null || (!enabled && tags.length > 0)) {
+    return res.status(400).json({ error: 'Invalid Agent access configuration.' });
+  }
+  try {
+    const agent = await Agent.findOne({
+      id: agentId,
+      author: scope.owner,
+      tenantId: scope.tenantId,
+    }).select('_id').lean();
+    if (!agent) return res.status(404).json({ error: 'Owned Agent not found.' });
+    const kb = await KnowledgeBase.findOne({ ...scope, _id: id }).lean();
+    if (!kb) return res.status(404).json({ error: 'Knowledge Base not found.' });
+    // Replacing an association with a conditional pipeline prevents duplicate grant rows.
+    const without = {
+      $filter: {
+        input: { $ifNull: ['$agent_access', []] },
+        as: 'grant',
+        cond: { $ne: ['$grant.agent_id', agentId] },
+      },
+    };
+    const nextGrant = { $literal: enabled ? [{ agent_id: agentId, tags }] : [] };
+    const updated = await KnowledgeBase.findOneAndUpdate(
+      { ...scope, _id: id },
+      [{ $set: { agent_access: { $concatArrays: [without, nextGrant] } } }],
+      { new: true },
+    ).lean();
+    if (!updated) return res.status(404).json({ error: 'Knowledge Base not found.' });
+    const grant = (updated.agent_access ?? []).find((item) => item.agent_id === agentId);
+    return res.json({ enabled: Boolean(grant), tags: grant?.tags ?? [] });
   } catch (error) {
     return failed(res, error);
   }

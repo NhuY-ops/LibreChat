@@ -10,6 +10,7 @@ const {
 const { Tools, EToolResources } = require('librechat-data-provider');
 const { filterFilesByAgentAccess } = require('~/server/services/Files/permissions');
 const { getFiles } = require('~/models');
+const { resolveAgentKnowledgeFiles } = require('~/server/services/KnowledgeBase/agentAccess');
 
 const fileSearchJsonSchema = {
   type: 'object',
@@ -60,6 +61,23 @@ const primeFiles = async (options) => {
 
   dbFiles = dbFiles.concat(resourceFiles);
 
+  // A KB is opt-in, and only the actual owner of both Agent and KB can
+  // retrieve its content. Existing direct File Search attachments are untouched.
+  if (req?.user?.id && agentId) {
+    const kbFiles = await resolveAgentKnowledgeFiles({
+      userId: req.user.id,
+      tenantId: req.user.tenantId,
+      agentId,
+    });
+    const existingIds = new Set(dbFiles.map((f) => f.file_id));
+    for (const file of kbFiles) {
+      if (!existingIds.has(file.file_id)) {
+        dbFiles.push(file);
+        existingIds.add(file.file_id);
+      }
+    }
+  }
+
   let toolContext = `- Note: Semantic search is available through the ${Tools.file_search} tool but no files are currently loaded. Request the user to upload documents to search through.`;
 
   const files = [];
@@ -77,7 +95,8 @@ const primeFiles = async (options) => {
     files.push({
       file_id: file.file_id,
       filename: file.filename,
-      fromAgent: agentResourceIds.has(file.file_id),
+      fromAgent: agentResourceIds.has(file.file_id) || file.kbManaged === true,
+      ...(file.kbManaged ? { kbManaged: true } : {}),
     });
   }
 
@@ -98,15 +117,28 @@ const createFileSearchTool = async ({
   userId,
   files,
   entity_id,
+  tenantId,
   fileCitations = false,
   appConfig,
 }) => {
   return tool(
-    ({ query }) =>
-      executeFileSearchQuery({
+    async ({ query }) => {
+      // Reauthorize the KB subset immediately before each RAG query. A revoked
+      // grant never persists just because a tool was primed earlier in the turn.
+      let currentFiles = files;
+      if (files.some((f) => f.kbManaged)) {
+        const authorized = await resolveAgentKnowledgeFiles({
+          agentId: entity_id,
+          userId,
+          tenantId,
+        });
+        const allowed = new Set(authorized.map((f) => f.file_id));
+        currentFiles = files.filter((f) => !f.kbManaged || allowed.has(f.file_id));
+      }
+      return executeFileSearchQuery({
         query,
         userId,
-        files,
+        files: currentFiles,
         entity_id,
         fileCitations,
         appConfig,
@@ -116,7 +148,8 @@ const createFileSearchTool = async ({
         logAxiosError,
         selectFileCitationSources,
         logger,
-      }),
+      });
+    },
     {
       name: Tools.file_search,
       responseFormat: 'content_and_artifact',

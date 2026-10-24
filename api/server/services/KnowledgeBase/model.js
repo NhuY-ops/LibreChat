@@ -12,6 +12,20 @@ const schema = new mongoose.Schema(
     description: { type: String, default: '', trim: true, maxlength: 500 },
     // Tags are scoped to a file's association with this specific KB,
     // not applied globally to the underlying RAG document.
+    // Opt-in Agent access is scoped to this KB and its owner. No Agent grants by default.
+    // Tags empty => all KB-linked files; nonempty => files with ANY chosen tag.
+    agent_access: {
+      type: [
+        new mongoose.Schema(
+          {
+            agent_id: { type: String, required: true },
+            tags: { type: [String], default: [] },
+          },
+          { _id: false },
+        ),
+      ],
+      default: [],
+    },
     file_tags: {
       type: [
         new mongoose.Schema(
@@ -46,6 +60,7 @@ const schema = new mongoose.Schema(
   { timestamps: true },
 );
 schema.index({ tenantId: 1, owner: 1, updatedAt: -1 });
+schema.index({ tenantId: 1, owner: 1, 'agent_access.agent_id': 1 });
 
 module.exports =
   mongoose.models.MineKnowledgeBase ||
