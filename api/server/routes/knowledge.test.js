@@ -222,6 +222,19 @@ describe('MINE Knowledge Base management API', () => {
     );
   });
 
+  it('clears tags with a two-array atomic update and keeps the file linked', async () => {
+    mockFindOne.mockResolvedValueOnce({ ...kb, file_ids: [FILE_ID] });
+    mockFindOneAndUpdate.mockResolvedValueOnce({ ...kb, file_ids: [FILE_ID], file_tags: [] });
+    const response = await request(app)
+      .patch('/api/knowledge/' + KB_ID + '/files/' + FILE_ID + '/tags')
+      .send({ tags: [] });
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ file_id: FILE_ID, tags: [] });
+    const pipeline = mockFindOneAndUpdate.mock.calls[0][1];
+    expect(pipeline[0].$set.file_tags.$concatArrays).toHaveLength(2);
+    expect(pipeline[0].$set.file_tags.$concatArrays[1]).toEqual({ $literal: [] });
+  });
+
   it('removes association and leaves the original RAG file intact', async () => {
     const response = await request(app).delete('/api/knowledge/' + KB_ID + '/files/' + FILE_ID);
     expect(response.status).toBe(200);
