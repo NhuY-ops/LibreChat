@@ -29,8 +29,70 @@ jest.mock('~/server/services/Files/permissions', () => ({
   filterFilesByAgentAccess: jest.fn((options) => Promise.resolve(options.files)),
 }));
 
+jest.mock('~/server/services/KnowledgeBase/agentAccess', () => ({
+  resolveAgentKnowledgeFiles: jest.fn().mockResolvedValue([]),
+}));
+
 const { createFileSearchTool, primeFiles } = require('~/app/clients/tools/util/fileSearch');
 const { generateShortLivedToken } = require('@librechat/api');
+
+describe('fileSearch.js - Knowledge Base runtime grants', () => {
+  const { resolveAgentKnowledgeFiles } = require('~/server/services/KnowledgeBase/agentAccess');
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    resolveAgentKnowledgeFiles.mockResolvedValue([]);
+  });
+
+  it('adds a KB file only when runtime grant resolution allows it', async () => {
+    resolveAgentKnowledgeFiles.mockResolvedValueOnce([
+      { file_id: 'kb-file', filename: 'immune.pdf', kbManaged: true },
+    ]);
+    const result = await primeFiles({
+      req: { user: { id: 'owner', role: 'USER', tenantId: 'team-a' } },
+      agentId: 'agent_owner',
+      tool_resources: { file_search: { file_ids: [] } },
+    });
+    expect(result.files).toEqual([
+      { file_id: 'kb-file', filename: 'immune.pdf', fromAgent: true, kbManaged: true },
+    ]);
+    expect(resolveAgentKnowledgeFiles).toHaveBeenCalledWith({
+      userId: 'owner', tenantId: 'team-a', agentId: 'agent_owner',
+    });
+  });
+
+  it('does not expose KB files after grant revocation between priming and retrieval', async () => {
+    resolveAgentKnowledgeFiles.mockResolvedValueOnce([]);
+    const { generateShortLivedToken } = require('@librechat/api');
+    const searchTool = await createFileSearchTool({
+      userId: 'owner',
+      tenantId: 'team-a',
+      entity_id: 'agent_owner',
+      files: [{ file_id: 'kb-file', filename: 'immune.pdf', kbManaged: true }],
+    });
+    const result = await searchTool.func({ query: 'secret' });
+    expect(result[0]).toMatch(/No files to search/);
+    expect(generateShortLivedToken).not.toHaveBeenCalled();
+  });
+
+  it('retains directly attached non-KB files if a KB grant is revoked', async () => {
+    resolveAgentKnowledgeFiles.mockResolvedValueOnce([]);
+    const searchTool = await createFileSearchTool({
+      userId: 'owner',
+      tenantId: 'team-a',
+      entity_id: 'agent_owner',
+      files: [
+        { file_id: 'kb-file', filename: 'immune.pdf', kbManaged: true },
+        { file_id: 'direct-file', filename: 'direct.pdf', fromAgent: true },
+      ],
+    });
+    const { generateShortLivedToken } = require('@librechat/api');
+    generateShortLivedToken.mockReturnValueOnce(null);
+    const result = await searchTool.func({ query: 'notes' });
+    expect(result[0]).toMatch(/error authenticating/);
+    expect(resolveAgentKnowledgeFiles).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe('fileSearch.js - agent file authorization', () => {
   it('uses the permission resource type established by the calling route', async () => {
