@@ -273,6 +273,7 @@ describe('MINE Knowledge Base management API', () => {
     expect(response.body).toEqual({ enabled: true, tags: ['immunology', 'research'] });
     const [filter, pipeline] = mockFindOneAndUpdate.mock.calls[0];
     expect(filter).toEqual({ _id: KB_ID, owner: 'owner-a', tenantId: 'team-one' });
+    expect(pipeline[0].$set.agent_access.$concatArrays[0].$filter.cond.$ne[0]).toBe('$grant.agent_id');
     expect(pipeline[0].$set.agent_access.$concatArrays[1]).toEqual({
       $literal: [{ agent_id: 'agent_abc123', tags: ['immunology', 'research'] }],
     });
