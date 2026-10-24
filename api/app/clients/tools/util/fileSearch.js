@@ -164,7 +164,10 @@ const createFileSearchTool = async ({
       const search = (namespace, scopedFiles) => executeFileSearchQuery({
         query,
         userId,
-        files: scopedFiles,
+        // Authorization is complete above. Feed only basic search fields to
+        // support both installed @librechat/api builds and updated source:
+        // some older builds treat kbManaged as an automatic user-scope hint.
+        files: scopedFiles.map(({ kbManaged: _kb, ragEntityId: _source, ...file }) => file),
         entity_id: namespace || undefined,
         fileCitations,
         appConfig,
