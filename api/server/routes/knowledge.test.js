@@ -150,12 +150,84 @@ describe('MINE Knowledge Base management API', () => {
     }
   });
 
+  it('includes KB-scoped tags only for file metadata allowed by RAG ownership checks', async () => {
+    mockFindOne.mockResolvedValueOnce({
+      ...kb,
+      file_ids: [FILE_ID],
+      file_tags: [{ file_id: FILE_ID, tags: ['immunology', 'research'] }],
+    });
+    mockFileFind.mockResolvedValueOnce([
+      { file_id: FILE_ID, filename: 'notes.pdf', type: 'application/pdf', bytes: 12 },
+    ]);
+    const response = await withUser('/api/knowledge/' + KB_ID + '/files');
+    expect(response.status).toBe(200);
+    expect(response.body[0].tags).toEqual(['immunology', 'research']);
+  });
+
+  it('rejects malformed tags without attempting any write', async () => {
+    const badInputs = [
+      { tags: 'research' },
+      { tags: [''] },
+      { tags: ['a'.repeat(33)] },
+      { tags: Array.from({ length: 11 }, (_, i) => String(i)) },
+      { tags: ['$literal', 42] },
+    ];
+    for (const body of badInputs) {
+      const response = await request(app)
+        .patch('/api/knowledge/' + KB_ID + '/files/' + FILE_ID + '/tags')
+        .send(body);
+      expect(response.status).toBe(400);
+    }
+    expect(mockFindOneAndUpdate).not.toHaveBeenCalled();
+  });
+
+  it('does not tag files outside the selected KB even if they exist in the user account', async () => {
+    const response = await request(app)
+      .patch('/api/knowledge/' + KB_ID + '/files/' + FILE_ID + '/tags')
+      .send({ tags: ['private'] });
+    expect(response.status).toBe(404);
+    expect(mockFileFindOne).not.toHaveBeenCalled();
+    expect(mockFindOneAndUpdate).not.toHaveBeenCalled();
+  });
+
+  it('rejects tag updates if the linked file is not still owned and indexed', async () => {
+    mockFindOne.mockResolvedValueOnce({ ...kb, file_ids: [FILE_ID] });
+    mockFileFindOne.mockResolvedValueOnce(null);
+    const response = await request(app)
+      .patch('/api/knowledge/' + KB_ID + '/files/' + FILE_ID + '/tags')
+      .send({ tags: ['research'] });
+    expect(response.status).toBe(404);
+    expect(mockFileFindOne).toHaveBeenCalledWith(expect.objectContaining({
+      file_id: FILE_ID, user: 'owner-a', tenantId: 'team-one', embedded: true,
+    }));
+    expect(mockFindOneAndUpdate).not.toHaveBeenCalled();
+  });
+
+  it('replaces tags atomically only on authorized, linked documents', async () => {
+    mockFindOne.mockResolvedValueOnce({ ...kb, file_ids: [FILE_ID] });
+    mockFindOneAndUpdate.mockResolvedValueOnce({
+      ...kb,
+      file_ids: [FILE_ID],
+      file_tags: [{ file_id: FILE_ID, tags: ['immunology', 'research'] }],
+    });
+    const response = await request(app)
+      .patch('/api/knowledge/' + KB_ID + '/files/' + FILE_ID + '/tags')
+      .send({ tags: [' Immunology ', 'research', 'immunology'] });
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ file_id: FILE_ID, tags: ['immunology', 'research'] });
+    expect(mockFindOneAndUpdate).toHaveBeenCalledWith(
+      { owner: 'owner-a', tenantId: 'team-one', _id: KB_ID, file_ids: FILE_ID },
+      expect.arrayContaining([expect.objectContaining({ $set: expect.any(Object) })]),
+      { new: true },
+    );
+  });
+
   it('removes association and leaves the original RAG file intact', async () => {
     const response = await request(app).delete('/api/knowledge/' + KB_ID + '/files/' + FILE_ID);
     expect(response.status).toBe(200);
     expect(mockFindOneAndUpdate).toHaveBeenCalledWith(
       { owner: 'owner-a', tenantId: 'team-one', _id: KB_ID },
-      { $pull: { file_ids: FILE_ID } },
+      { $pull: { file_ids: FILE_ID, file_tags: { file_id: FILE_ID } } },
       { new: true },
     );
   });

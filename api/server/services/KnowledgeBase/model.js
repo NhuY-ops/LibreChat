@@ -10,6 +10,30 @@ const schema = new mongoose.Schema(
     tenantId: { type: String, default: null, index: true },
     name: { type: String, required: true, trim: true, maxlength: 100 },
     description: { type: String, default: '', trim: true, maxlength: 500 },
+    // Tags are scoped to a file's association with this specific KB,
+    // not applied globally to the underlying RAG document.
+    file_tags: {
+      type: [
+        new mongoose.Schema(
+          {
+            file_id: { type: String, required: true },
+            tags: {
+              type: [String],
+              default: [],
+              validate: {
+                validator: (items) =>
+                  Array.isArray(items) &&
+                  items.length <= 10 &&
+                  items.every((tag) => typeof tag === 'string' && tag.length <= 32),
+                message: 'At most 10 tags of 32 characters each are allowed',
+              },
+            },
+          },
+          { _id: false },
+        ),
+      ],
+      default: [],
+    },
     file_ids: {
       type: [String],
       default: [],

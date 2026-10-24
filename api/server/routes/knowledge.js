@@ -7,6 +7,8 @@ const KnowledgeBase = require('~/server/services/KnowledgeBase/model');
 const router = express.Router();
 const MAX_LIBRARIES = 100;
 const MAX_FILES = 250;
+const MAX_TAGS = 10;
+const MAX_TAG_LENGTH = 32;
 const ID_PATTERN = /^[a-f\d]{24}$/i;
 const FILE_ID_PATTERN = /^[a-zA-Z0-9_-]{1,150}$/;
 
@@ -34,6 +36,21 @@ function validDescription(input) {
 }
 function validId(input) {
   return typeof input === 'string' && ID_PATTERN.test(input);
+}
+function normalizeTags(input) {
+  if (!Array.isArray(input) || input.length > MAX_TAGS) return null;
+  const tags = [];
+  for (const value of input) {
+    if (typeof value !== 'string') return null;
+    const tag = value.normalize('NFKC').trim().toLowerCase();
+    if (!tag || tag.length > MAX_TAG_LENGTH) return null;
+    if (!tags.includes(tag)) tags.push(tag);
+  }
+  return tags;
+}
+function tagList(kb, fileId) {
+  const item = (kb.file_tags ?? []).find((entry) => entry.file_id === fileId);
+  return Array.isArray(item?.tags) ? item.tags : [];
 }
 function fileScope(scope, fileId) {
   return {
@@ -114,7 +131,13 @@ router.get('/:id/files', async (req, res) => {
     const byId = new Map(files.map((file) => [file.file_id, file]));
     return res.json(kb.file_ids.filter((id) => byId.has(id)).map((id) => {
       const file = byId.get(id);
-      return { file_id: file.file_id, filename: file.filename, type: file.type, bytes: file.bytes };
+      return {
+        file_id: file.file_id,
+        filename: file.filename,
+        type: file.type,
+        bytes: file.bytes,
+        tags: tagList(kb, id),
+      };
     }));
   } catch (error) {
     return failed(res, error);
@@ -151,6 +174,53 @@ router.post('/:id/files', async (req, res) => {
   }
 });
 
+/**
+ * Tags are annotations on KB-file associations only. This route does not
+ * create global file tags, change embedding, or grant Agent search access.
+ * Update uses a single aggregation pipeline for atomic replacement, avoiding
+ * lost data from concurrent tag writes and protecting literal tag values.
+ */
+router.patch('/:id/files/:fileId/tags', async (req, res) => {
+  const scope = requestScope(req, res);
+  if (!scope) return;
+  const { id, fileId } = req.params;
+  if (!validId(id) || !FILE_ID_PATTERN.test(fileId ?? '')) {
+    return res.status(400).json({ error: 'Invalid ID.' });
+  }
+  const tags = normalizeTags(req.body?.tags);
+  if (tags === null) {
+    return res.status(400).json({ error: 'Provide up to 10 non-empty tags (32 characters each).' });
+  }
+  try {
+    const kb = await KnowledgeBase.findOne({ ...scope, _id: id, file_ids: fileId }).lean();
+    if (!kb || !kb.file_ids?.includes(fileId)) {
+      return res.status(404).json({ error: 'Linked Knowledge Base document not found.' });
+    }
+    // The original file must still be accessible/embedded in this tenant.
+    const owned = await File.findOne(fileScope(scope, fileId)).select('_id').lean();
+    if (!owned) {
+      return res.status(404).json({ error: 'Indexed document is no longer accessible.' });
+    }
+    const previous = {
+      $filter: {
+        input: { $ifNull: ['$file_tags', []] },
+        as: 'entry',
+        cond: { $ne: ['$entry.file_id', fileId] },
+      },
+    };
+    const replacement = tags.length ? [{ $literal: [{ file_id: fileId, tags }] }] : [];
+    const updated = await KnowledgeBase.findOneAndUpdate(
+      { ...scope, _id: id, file_ids: fileId },
+      [{ $set: { file_tags: { $concatArrays: [previous, ...replacement] } } }],
+      { new: true },
+    ).lean();
+    if (!updated) return res.status(404).json({ error: 'Linked document was removed.' });
+    return res.json({ file_id: fileId, tags: tagList(updated, fileId) });
+  } catch (error) {
+    return failed(res, error);
+  }
+});
+
 router.delete('/:id/files/:fileId', async (req, res) => {
   const scope = requestScope(req, res);
   if (!scope) return;
@@ -160,7 +230,7 @@ router.delete('/:id/files/:fileId', async (req, res) => {
   try {
     const updated = await KnowledgeBase.findOneAndUpdate(
       { ...scope, _id: req.params.id },
-      { $pull: { file_ids: req.params.fileId } },
+      { $pull: { file_ids: req.params.fileId, file_tags: { file_id: req.params.fileId } } },
       { new: true },
     ).lean();
     if (!updated) return res.status(404).json({ error: 'Knowledge Base not found.' });
