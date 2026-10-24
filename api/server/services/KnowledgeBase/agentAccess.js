@@ -1,6 +1,7 @@
 const { getTenantId, SYSTEM_TENANT_ID, logger } = require('@librechat/data-schemas');
 const { Agent, File } = require('~/db/models');
 const KnowledgeBase = require('./model');
+const ChatKnowledgeSelection = require('./chatSelection');
 
 const MAX_KB_FILES_PER_TURN = 500;
 
@@ -9,15 +10,25 @@ const MAX_KB_FILES_PER_TURN = 500;
  * A KB grant is scoped per Agent and per document's membership of that KB.
  * This helper is pure, enabling repeatable tests without an active Mongo server.
  */
-function grantedFileIds(libraries, agentId) {
+function grantedFileIds(libraries, agentId, chatSelection = null) {
+  const chatChoices = chatSelection
+    ? new Map((chatSelection.libraries ?? []).map((entry) => [entry.kb_id, entry.tags ?? []]))
+    : null;
   const ids = new Set();
   for (const kb of libraries) {
+    if (chatChoices && !chatChoices.has(String(kb._id))) continue;
+    const chatTags = chatChoices?.get(String(kb._id)) ?? [];
     const grant = (kb.agent_access ?? []).find((g) => g.agent_id === agentId);
     if (!grant) continue;
     const allowedTags = Array.isArray(grant.tags) ? grant.tags : [];
     const tagLookup = new Map((kb.file_tags ?? []).map((t) => [t.file_id, t.tags ?? []]));
     for (const id of kb.file_ids ?? []) {
-      if (allowedTags.length && !(tagLookup.get(id) ?? []).some((t) => allowedTags.includes(t))) {
+      const fileTags = tagLookup.get(id) ?? [];
+      if (allowedTags.length && !fileTags.some((t) => allowedTags.includes(t))) {
+        continue;
+      }
+      // Chat filters may narrow the Agent's tags; never broaden them.
+      if (chatTags.length && !fileTags.some((t) => chatTags.includes(t))) {
         continue;
       }
       ids.add(id);
@@ -32,7 +43,7 @@ function grantedFileIds(libraries, agentId) {
  * invalid/expired/unembedded files, or requests without a valid Agent.
  * Never fail open on database or tenant-scoping errors.
  */
-async function resolveAgentKnowledgeFiles({ agentId, userId, tenantId }) {
+async function resolveAgentKnowledgeFiles({ agentId, userId, tenantId, conversationId }) {
   if (typeof agentId !== 'string' || !agentId.startsWith('agent_') || !userId) return [];
   const requestTenant = getTenantId() ?? null;
   // If a propagated tenant differs from the request user tenant, deny rather
@@ -53,7 +64,17 @@ async function resolveAgentKnowledgeFiles({ agentId, userId, tenantId }) {
       ...scope,
       'agent_access.agent_id': agentId,
     }).select('file_ids file_tags agent_access').lean();
-    const permitted = grantedFileIds(libraries, agentId);
+    // No persisted conversation selection = backward-compatible V3 Agent grants.
+    // An explicit empty selection means NONE. Always query current Mongo state
+    // (including during tool execution) so revocation takes effect immediately.
+    const chatSelection = typeof conversationId === 'string' &&
+      /^[a-zA-Z0-9_-]{1,150}$/.test(conversationId) &&
+      conversationId !== 'new'
+      ? await ChatKnowledgeSelection.findOne({
+          ...scope, conversationId, agentId,
+        }).lean()
+      : null;
+    const permitted = grantedFileIds(libraries, agentId, chatSelection);
     if (!permitted.length) return [];
     const files = await File.find({
       user: scope.owner,
