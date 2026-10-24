@@ -95,7 +95,10 @@ const primeFiles = async (options) => {
     files.push({
       file_id: file.file_id,
       filename: file.filename,
-      fromAgent: agentResourceIds.has(file.file_id) || file.kbManaged === true,
+      // KB-managed files are already indexed in the *user* namespace.
+      // fromAgent would incorrectly target this Agent's vector namespace.
+      // Direct Agent resource files retain their original namespace.
+      fromAgent: agentResourceIds.has(file.file_id),
       ...(file.kbManaged ? { kbManaged: true } : {}),
     });
   }
