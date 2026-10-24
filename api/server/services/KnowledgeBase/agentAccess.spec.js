@@ -1,4 +1,5 @@
 const mockAgentFind = jest.fn();
+const mockSourceAgentsFind = jest.fn();
 const mockKbFind = jest.fn();
 const mockFileFind = jest.fn();
 const mockTenant = jest.fn();
@@ -8,7 +9,10 @@ jest.mock('@librechat/data-schemas', () => ({
   logger: { error: jest.fn() },
 }));
 jest.mock('~/db/models', () => ({
-  Agent: { findOne: (...a) => ({ select: () => ({ lean: () => mockAgentFind(...a) }) }) },
+  Agent: {
+    findOne: (...a) => ({ select: () => ({ lean: () => mockAgentFind(...a) }) }),
+    find: (...a) => ({ select: () => ({ lean: () => mockSourceAgentsFind(...a) }) }),
+  },
   File: { find: (...a) => ({ select: () => ({ lean: () => mockFileFind(...a) }) }) },
 }));
 jest.mock('./model', () => ({
@@ -20,6 +24,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockTenant.mockReturnValue('team-a');
   mockAgentFind.mockResolvedValue({ _id: 'owned' });
+  mockSourceAgentsFind.mockResolvedValue([]);
   mockKbFind.mockResolvedValue([]);
   mockFileFind.mockResolvedValue([]);
 });
@@ -69,6 +74,51 @@ describe('Agent KB retrieval (fail closed)', () => {
       file_id: { $in: ['a', 'expired'] }, $or: expect.any(Array),
     }));
   });
+  it('resolves a legacy Agent file only from a same-owner, same-tenant source', async () => {
+    mockKbFind.mockResolvedValueOnce([
+      { file_ids: ['file-agent'], agent_access: [{ agent_id: params.agentId, tags: [] }] },
+    ]);
+    mockFileFind.mockResolvedValueOnce([{
+      file_id: 'file-agent', filename: 'immune.txt', user: params.userId,
+      context: 'agents', metadata: { embeddedEntities: ['agent_original'] },
+    }]);
+    mockSourceAgentsFind.mockResolvedValueOnce([{ id: 'agent_original' }]);
+    expect(await resolveAgentKnowledgeFiles(params)).toEqual([{
+      file_id: 'file-agent', filename: 'immune.txt', user: params.userId,
+      kbManaged: true, ragEntityId: 'agent_original',
+    }]);
+    expect(mockSourceAgentsFind).toHaveBeenCalledWith({
+      id: { $in: ['agent_original'] },
+      author: params.userId, tenantId: params.tenantId,
+    });
+  });
+
+  it('does not fall back to user namespace for a deleted or foreign Agent source', async () => {
+    mockKbFind.mockResolvedValueOnce([
+      { file_ids: ['file-agent'], agent_access: [{ agent_id: params.agentId, tags: [] }] },
+    ]);
+    mockFileFind.mockResolvedValueOnce([{
+      file_id: 'file-agent', filename: 'immune.txt', user: params.userId,
+      context: 'agents', metadata: { embeddedEntities: ['agent_not_owned'] },
+    }]);
+    mockSourceAgentsFind.mockResolvedValueOnce([]);
+    expect(await resolveAgentKnowledgeFiles(params)).toEqual([]);
+  });
+
+  it('keeps a regular user-indexed KB attachment in user RAG scope', async () => {
+    mockKbFind.mockResolvedValueOnce([
+      { file_ids: ['file-user'], agent_access: [{ agent_id: params.agentId, tags: [] }] },
+    ]);
+    mockFileFind.mockResolvedValueOnce([{
+      file_id: 'file-user', filename: 'notes.txt', user: params.userId,
+      context: 'message_attachment',
+    }]);
+    expect(await resolveAgentKnowledgeFiles(params)).toEqual([{
+      file_id: 'file-user', filename: 'notes.txt', user: params.userId, kbManaged: true,
+    }]);
+    expect(mockSourceAgentsFind).not.toHaveBeenCalled();
+  });
+
   it('denies revoked grant', async () => {
     mockKbFind.mockResolvedValueOnce([{ file_ids: ['a'], agent_access: [] }]);
     expect(await resolveAgentKnowledgeFiles(params)).toEqual([]);
