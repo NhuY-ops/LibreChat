@@ -1,5 +1,4 @@
 const express = require('express');
-const mongoose = require('mongoose');
 const { getTenantId, SYSTEM_TENANT_ID, logger } = require('@librechat/data-schemas');
 const { requireJwtAuth } = require('~/server/middleware');
 const { File } = require('~/db/models');
