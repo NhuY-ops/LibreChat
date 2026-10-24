@@ -208,10 +208,11 @@ router.patch('/:id/files/:fileId/tags', async (req, res) => {
         cond: { $ne: ['$entry.file_id', fileId] },
       },
     };
-    const replacement = tags.length ? [{ $literal: [{ file_id: fileId, tags }] }] : [];
+    // Always provide two arrays: clearing tags must still be a valid Mongo expression.
+    const replacement = { $literal: tags.length ? [{ file_id: fileId, tags }] : [] };
     const updated = await KnowledgeBase.findOneAndUpdate(
       { ...scope, _id: id, file_ids: fileId },
-      [{ $set: { file_tags: { $concatArrays: [previous, ...replacement] } } }],
+      [{ $set: { file_tags: { $concatArrays: [previous, replacement] } } }],
       { new: true },
     ).lean();
     if (!updated) return res.status(404).json({ error: 'Linked document was removed.' });
