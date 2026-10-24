@@ -3,6 +3,7 @@ const { getTenantId, SYSTEM_TENANT_ID, logger } = require('@librechat/data-schem
 const { requireJwtAuth } = require('~/server/middleware');
 const { File, Agent, Conversation } = require('~/db/models');
 const ChatKnowledgeSelection = require('~/server/services/KnowledgeBase/chatSelection');
+const { REGULAR_CHAT_SCOPE } = require('~/server/services/KnowledgeBase/chatAccess');
 const KnowledgeBase = require('~/server/services/KnowledgeBase/model');
 
 const router = express.Router();
@@ -164,9 +165,9 @@ router.put('/:id/agent-access/:agentId', async (req, res) => {
 });
 
 /**
- * V4: Conversation selections only narrow pre-existing Agent KB grants.
- * No implicit access, no new Agent grants, no cross-tenant or shared-conversation reads.
- * New conversations must be saved first; an absent selection inherits V3 grants.
+ * V4.2: Agent selections still narrow existing Agent grants. Owner-only regular
+ * chats can explicitly select owner-owned KBs; no implicit access. Conversation
+ * must already exist, be owned, non-temporary, and belong to this tenant.
  */
 async function authorizedChat(req, res, scope) {
   const conversationId = req.params.conversationId;
@@ -180,20 +181,26 @@ async function authorizedChat(req, res, scope) {
     tenantId: scope.tenantId,
     isTemporary: { $ne: true },
   }).select('agent_id').lean();
-  if (!conversation?.agent_id) {
-    res.status(404).json({ error: 'Saved Agent conversation not found.' });
+  if (!conversation) {
+    res.status(404).json({ error: 'Saved conversation not found.' });
     return null;
   }
-  const agent = await Agent.findOne({
-    id: conversation.agent_id,
-    author: scope.owner,
-    tenantId: scope.tenantId,
-  }).select('_id').lean();
-  if (!agent) {
-    res.status(404).json({ error: 'Owned Agent not found.' });
-    return null;
+  if (conversation.agent_id) {
+    const agent = await Agent.findOne({
+      id: conversation.agent_id,
+      author: scope.owner,
+      tenantId: scope.tenantId,
+    }).select('_id').lean();
+    if (!agent) {
+      res.status(404).json({ error: 'Owned Agent not found.' });
+      return null;
+    }
   }
-  return { conversationId, agentId: conversation.agent_id };
+  return {
+    conversationId,
+    agentId: conversation.agent_id || null,
+    selectionScope: conversation.agent_id || REGULAR_CHAT_SCOPE,
+  };
 }
 
 router.get('/chat/:conversationId', async (req, res) => {
@@ -204,24 +211,26 @@ router.get('/chat/:conversationId', async (req, res) => {
     if (!chat) return;
     const libraries = await KnowledgeBase.find({
       ...scope,
-      'agent_access.agent_id': chat.agentId,
+      ...(chat.agentId ? { 'agent_access.agent_id': chat.agentId } : {}),
     }).select('_id name file_ids agent_access').lean();
     const available = libraries.map((kb) => ({
       kb_id: String(kb._id),
       name: kb.name,
       file_count: kb.file_ids?.length ?? 0,
-      agent_tags: (kb.agent_access ?? []).find((grant) => grant.agent_id === chat.agentId)?.tags ?? [],
+      agent_tags: chat.agentId
+        ? (kb.agent_access ?? []).find((grant) => grant.agent_id === chat.agentId)?.tags ?? []
+        : [],
     }));
     const record = await ChatKnowledgeSelection.findOne({
       ...scope,
       conversationId: chat.conversationId,
-      agentId: chat.agentId,
+      agentId: chat.selectionScope,
     }).lean();
     const allowed = new Set(available.map((item) => item.kb_id));
     const selected = record
       ? (record.libraries ?? []).filter((entry) => allowed.has(entry.kb_id))
         .map((entry) => ({ kb_id: entry.kb_id, tags: entry.tags ?? [] }))
-      : available.map(({ kb_id }) => ({ kb_id, tags: [] }));
+      : chat.agentId ? available.map(({ kb_id }) => ({ kb_id, tags: [] })) : [];
     return res.json({ available, selected, inherited: !record });
   } catch (error) {
     return failed(res, error);
@@ -255,15 +264,15 @@ router.put('/chat/:conversationId', async (req, res) => {
       const allowed = await KnowledgeBase.find({
         ...scope,
         _id: { $in: [...unique] },
-        'agent_access.agent_id': chat.agentId,
+        ...(chat.agentId ? { 'agent_access.agent_id': chat.agentId } : {}),
       }).select('_id').lean();
       const authorizedIds = new Set(allowed.map((kb) => String(kb._id)));
       if (authorizedIds.size !== unique.size || [...unique].some((id) => !authorizedIds.has(id))) {
-        return res.status(403).json({ error: 'KB selection exceeds existing Agent grants.' });
+        return res.status(403).json({ error: 'KB selection exceeds authorized libraries.' });
       }
     }
     await ChatKnowledgeSelection.findOneAndUpdate(
-      { ...scope, conversationId: chat.conversationId, agentId: chat.agentId },
+      { ...scope, conversationId: chat.conversationId, agentId: chat.selectionScope },
       { $set: { libraries } },
       { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true },
     );
