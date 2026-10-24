@@ -15,6 +15,7 @@ import { useBadgeRowContext } from '~/Providers';
 import TokenUsage from '../TokenUsage';
 import { useLocalize } from '~/hooks';
 import Thinking from './Thinking';
+import ChatKnowledgePicker from '../ChatKnowledgePicker';
 import Palette from './Palette';
 import { cn } from '~/utils';
 import Chip from './Chip';
@@ -424,6 +425,13 @@ function Bar({
             anchorRef={anchorRef}
           />
         </span>
+        {agentId && (
+          <ChatKnowledgePicker
+            conversationId={conversationId}
+            agentId={agentId}
+            disabled={disabled || isSubmitting}
+          />
+        )}
         {/* A box rather than `contents` so it has something to move: the split
             only puts chips here when they all fit on this line, so wrapping as
             one unit and wrapping as siblings come to the same layout. */}
