@@ -1,11 +1,14 @@
 const express = require('express');
 const { getTenantId, SYSTEM_TENANT_ID, logger } = require('@librechat/data-schemas');
 const { requireJwtAuth } = require('~/server/middleware');
-const { File, Agent } = require('~/db/models');
+const { File, Agent, Conversation } = require('~/db/models');
+const ChatKnowledgeSelection = require('~/server/services/KnowledgeBase/chatSelection');
 const KnowledgeBase = require('~/server/services/KnowledgeBase/model');
 
 const router = express.Router();
 const MAX_LIBRARIES = 100;
+const MAX_CHAT_LIBRARIES = 50;
+const CONVERSATION_ID_PATTERN = /^[a-zA-Z0-9_-]{1,150}$/;
 const MAX_FILES = 250;
 const MAX_TAGS = 10;
 const MAX_TAG_LENGTH = 32;
@@ -155,6 +158,116 @@ router.put('/:id/agent-access/:agentId', async (req, res) => {
     if (!updated) return res.status(404).json({ error: 'Knowledge Base not found.' });
     const grant = (updated.agent_access ?? []).find((item) => item.agent_id === agentId);
     return res.json({ enabled: Boolean(grant), tags: grant?.tags ?? [] });
+  } catch (error) {
+    return failed(res, error);
+  }
+});
+
+/**
+ * V4: Conversation selections only narrow pre-existing Agent KB grants.
+ * No implicit access, no new Agent grants, no cross-tenant or shared-conversation reads.
+ * New conversations must be saved first; an absent selection inherits V3 grants.
+ */
+async function authorizedChat(req, res, scope) {
+  const conversationId = req.params.conversationId;
+  if (!CONVERSATION_ID_PATTERN.test(conversationId ?? '')) {
+    res.status(400).json({ error: 'Invalid conversation ID.' });
+    return null;
+  }
+  const conversation = await Conversation.findOne({
+    conversationId,
+    user: scope.owner,
+    tenantId: scope.tenantId,
+    isTemporary: { $ne: true },
+  }).select('agent_id').lean();
+  if (!conversation?.agent_id) {
+    res.status(404).json({ error: 'Saved Agent conversation not found.' });
+    return null;
+  }
+  const agent = await Agent.findOne({
+    id: conversation.agent_id,
+    author: scope.owner,
+    tenantId: scope.tenantId,
+  }).select('_id').lean();
+  if (!agent) {
+    res.status(404).json({ error: 'Owned Agent not found.' });
+    return null;
+  }
+  return { conversationId, agentId: conversation.agent_id };
+}
+
+router.get('/chat/:conversationId', async (req, res) => {
+  const scope = requestScope(req, res);
+  if (!scope) return;
+  try {
+    const chat = await authorizedChat(req, res, scope);
+    if (!chat) return;
+    const libraries = await KnowledgeBase.find({
+      ...scope,
+      'agent_access.agent_id': chat.agentId,
+    }).select('_id name file_ids agent_access').lean();
+    const available = libraries.map((kb) => ({
+      kb_id: String(kb._id),
+      name: kb.name,
+      file_count: kb.file_ids?.length ?? 0,
+      agent_tags: (kb.agent_access ?? []).find((grant) => grant.agent_id === chat.agentId)?.tags ?? [],
+    }));
+    const record = await ChatKnowledgeSelection.findOne({
+      ...scope,
+      conversationId: chat.conversationId,
+      agentId: chat.agentId,
+    }).lean();
+    const allowed = new Set(available.map((item) => item.kb_id));
+    const selected = record
+      ? (record.libraries ?? []).filter((entry) => allowed.has(entry.kb_id))
+        .map((entry) => ({ kb_id: entry.kb_id, tags: entry.tags ?? [] }))
+      : available.map(({ kb_id }) => ({ kb_id, tags: [] }));
+    return res.json({ available, selected, inherited: !record });
+  } catch (error) {
+    return failed(res, error);
+  }
+});
+
+router.put('/chat/:conversationId', async (req, res) => {
+  const scope = requestScope(req, res);
+  if (!scope) return;
+  const input = req.body?.libraries;
+  if (!Array.isArray(input) || input.length > MAX_CHAT_LIBRARIES) {
+    return res.status(400).json({ error: 'Provide up to 50 KB selections.' });
+  }
+  const libraries = [];
+  const unique = new Set();
+  for (const item of input) {
+    if (!item || !validId(item.kb_id) || unique.has(item.kb_id)) {
+      return res.status(400).json({ error: 'Invalid or duplicate KB selection.' });
+    }
+    const tags = normalizeTags(item.tags ?? []);
+    if (tags === null) {
+      return res.status(400).json({ error: 'Invalid KB tag filters.' });
+    }
+    unique.add(item.kb_id);
+    libraries.push({ kb_id: item.kb_id, tags });
+  }
+  try {
+    const chat = await authorizedChat(req, res, scope);
+    if (!chat) return;
+    if (unique.size) {
+      const allowed = await KnowledgeBase.find({
+        ...scope,
+        _id: { $in: [...unique] },
+        'agent_access.agent_id': chat.agentId,
+      }).select('_id').lean();
+      const authorizedIds = new Set(allowed.map((kb) => String(kb._id)));
+      if (authorizedIds.size !== unique.size || [...unique].some((id) => !authorizedIds.has(id))) {
+        return res.status(403).json({ error: 'KB selection exceeds existing Agent grants.' });
+      }
+    }
+    await ChatKnowledgeSelection.findOneAndUpdate(
+      { ...scope, conversationId: chat.conversationId, agentId: chat.agentId },
+      { $set: { libraries } },
+      { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true },
+    );
+    return res.json({ selected: libraries, inherited: false });
   } catch (error) {
     return failed(res, error);
   }
