@@ -498,10 +498,11 @@ export default function KnowledgeBaseView() {
           </div>
           <div className="border-border-light rounded-xl border p-4">
             <Link2 className="text-text-secondary mb-3 size-5" aria-hidden="true" />
-            <h2 className="text-sm font-semibold">Agent KB access — upcoming</h2>
+            <h2 className="text-sm font-semibold">Agent Knowledge Base Access</h2>
             <p className="text-text-secondary mt-2 text-sm leading-6">
-              Chat/Agent access, KB tags, uploads inside this page, and connected sources
-              require separate authorization and retrieval wiring. None are enabled yet.
+              Open a saved Agent's Builder and enable one or more Knowledge Bases
+              under Knowledge Base Access. Only approved indexed files are available through
+              the Agent's File Search tool; ordinary chats and connected sources are not enabled yet.
             </p>
           </div>
         </section>
