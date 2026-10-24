@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, Database } from 'lucide-react';
 import { apiBaseUrl, request } from 'librechat-data-provider';
@@ -55,6 +56,13 @@ export default function ChatKnowledgePicker({
     { enabled: ready, retry: false, refetchOnWindowFocus: false },
   );
   const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [popupPlacement, setPopupPlacement] = useState<{
+    left: number;
+    bottom: number;
+    width: number;
+    maxHeight: number;
+  } | null>(null);
   const [draft, setDraft] = useState<Record<string, DraftValue>>({});
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
@@ -74,6 +82,34 @@ export default function ChatKnowledgePicker({
     ])));
     setError('');
   }, [query.data, conversationId, agentId]);
+
+  // The composer surface clips overflowing children; render the KB picker
+  // through a portal so the options remain visible above the composer.
+  useEffect(() => {
+    if (!open || !ready) {
+      setPopupPlacement(null);
+      return;
+    }
+    const placePopup = () => {
+      const trigger = triggerRef.current;
+      if (!trigger) return;
+      const bounds = trigger.getBoundingClientRect();
+      const width = Math.min(352, window.innerWidth - 16);
+      setPopupPlacement({
+        left: Math.max(8, Math.min(bounds.left, window.innerWidth - width - 8)),
+        bottom: Math.max(8, window.innerHeight - bounds.top + 8),
+        width,
+        maxHeight: Math.max(80, bounds.top - 16),
+      });
+    };
+    placePopup();
+    window.addEventListener('resize', placePopup);
+    window.addEventListener('scroll', placePopup, true);
+    return () => {
+      window.removeEventListener('resize', placePopup);
+      window.removeEventListener('scroll', placePopup, true);
+    };
+  }, [open, ready]);
 
   const count = useMemo(
     () => Object.values(draft).filter((item) => item.enabled).length,
@@ -111,6 +147,7 @@ export default function ChatKnowledgePicker({
   return (
     <div className="relative shrink-0">
       <button
+        ref={triggerRef}
         type="button"
         disabled={disabled || !ready}
         aria-label="Chat Knowledge Bases"
@@ -123,14 +160,15 @@ export default function ChatKnowledgePicker({
         <span>KB {ready ? count : '—'}</span>
         <ChevronDown className="size-3" aria-hidden="true" />
       </button>
-      {open && ready && (
+      {open && ready && popupPlacement && createPortal(
         <div
           role="dialog"
           aria-label="Knowledge Bases for this conversation"
           onKeyDown={(event) => {
             if (event.key === 'Escape') setOpen(false);
           }}
-          className="border-border-medium bg-surface-primary absolute bottom-full left-0 z-50 mb-2 w-[min(22rem,85vw)] rounded-xl border p-3 shadow-xl"
+          style={popupPlacement}
+          className="border-border-medium bg-surface-primary fixed z-[100] overflow-y-auto rounded-xl border p-3 shadow-xl"
         >
           <div className="flex items-center justify-between gap-3">
             <h3 className="text-text-primary text-sm font-semibold">Chat Knowledge Bases</h3>
@@ -197,7 +235,8 @@ export default function ChatKnowledgePicker({
               {pending ? 'Saving…' : 'Save for this chat'}
             </button>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
