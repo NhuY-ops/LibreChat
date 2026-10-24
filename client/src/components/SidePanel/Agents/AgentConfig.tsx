@@ -16,6 +16,7 @@ import AgentAvatar from './AgentAvatar';
 import MineAgentQuickStart from './MineAgentQuickStart';
 import MineResearchV1Upgrade from './MineResearchV1Upgrade';
 import MineAgentSetupGuide from './MineAgentSetupGuide';
+import AgentKnowledgeAccess from './AgentKnowledgeAccess';
 import Starters from './Starters';
 import { Panel } from '~/common';
 
@@ -175,6 +176,9 @@ export default function AgentConfig({
           <FileContext agent_id={agent_id} files={contextFiles} />
         </div>
       )}
+
+      {/* Opt-in Knowledge Base grants. Saved agents only; separate from their own attachments. */}
+      <AgentKnowledgeAccess agentId={agent_id} />
 
       {/* CONVERSATION STARTERS */}
       <Starters />
