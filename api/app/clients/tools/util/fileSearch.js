@@ -67,6 +67,7 @@ const primeFiles = async (options) => {
     const kbFiles = await resolveAgentKnowledgeFiles({
       userId: req.user.id,
       tenantId: req.user.tenantId,
+      conversationId: req.body?.conversationId,
       agentId,
     });
     const existingIds = new Set(dbFiles.map((f) => f.file_id));
@@ -121,6 +122,7 @@ const createFileSearchTool = async ({
   files,
   entity_id,
   tenantId,
+  conversationId,
   fileCitations = false,
   appConfig,
 }) => {
@@ -134,6 +136,7 @@ const createFileSearchTool = async ({
           agentId: entity_id,
           userId,
           tenantId,
+          conversationId,
         });
         const allowed = new Map(authorized.map((f) => [f.file_id, f]));
         currentFiles = files.flatMap((file) => {
