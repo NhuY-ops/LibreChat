@@ -163,6 +163,43 @@ describe('MINE Chat KB V4 routes (restrict existing Agent grants)', () => {
   });
 });
 
+describe('MINE KB V4.3 New Chat catalog (read-only)', () => {
+  it('shows only owner-scoped KB metadata without granting any selection', async () => {
+    mockFind.mockResolvedValueOnce([
+      { _id: KB_ID, name: 'Research', file_ids: [FILE_ID] },
+    ]);
+    const result = await request(app).get('/api/knowledge/chat/new/available');
+    expect(result.status).toBe(200);
+    expect(result.body).toEqual({
+      available: [{
+        kb_id: KB_ID, name: 'Research', file_count: 1, agent_tags: [],
+      }],
+      selected: [],
+      inherited: false,
+      pending: true,
+    });
+    expect(mockFind).toHaveBeenCalledWith({
+      owner: 'owner-a', tenantId: 'team-one',
+    });
+    expect(mockChatSelectionUpsert).not.toHaveBeenCalled();
+    expect(mockConvoFindOne).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when the current request has no valid tenant scope', async () => {
+    mockGetTenantId.mockReturnValueOnce('__SYSTEM__');
+    const result = await request(app).get('/api/knowledge/chat/new/available');
+    expect(result.status).toBe(403);
+    expect(mockFind).not.toHaveBeenCalled();
+  });
+
+  it('never interprets a New Chat catalog request as a saved conversation', async () => {
+    const result = await request(app).get('/api/knowledge/chat/new/available');
+    expect(result.status).toBe(200);
+    expect(result.body.selected).toEqual([]);
+    expect(mockConvoFindOne).not.toHaveBeenCalled();
+  });
+});
+
 describe('MINE KB V4.2 regular saved chat selection', () => {
   const route = '/api/knowledge/chat/regular-chat';
   const selected = [{ kb_id: KB_ID, tags: ['clinical'] }];
