@@ -200,7 +200,15 @@ const createFileSearchTool = async ({
         selectFileCitationSources,
         logger,
       });
-      if (!groups.size) return search('', []);
+      // Fail closed in this module, before calling any external/helper search API:
+      // an empty authorized file set must never become an unscoped RAG query,
+      // even if a future helper build changes its empty-files behavior.
+      if (!groups.size) {
+        return [
+          'No files to search. This conversation has no authorized File Search sources.',
+          undefined,
+        ];
+      }
       if (groups.size === 1) {
         const [namespace, groupFiles] = groups.entries().next().value;
         return search(namespace, groupFiles);
