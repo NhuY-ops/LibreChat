@@ -178,7 +178,10 @@ export default function ChatKnowledgePicker({
           endpoint: conversation.endpoint,
           model: conversation.model,
           agent_id: undefined,
-        }, { currentConvoId: conversationId });
+        });
+        // New Chat has no previous saved conversation to invalidate.
+        // Passing its sentinel ID as currentConvoId also incorrectly widens
+        // the type to the mixed string/number Constants enum.
       } else {
         await request.put(url(conversationId), { libraries });
         await queryClient.invalidateQueries(queryKey);
