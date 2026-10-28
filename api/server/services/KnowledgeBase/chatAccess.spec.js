@@ -43,7 +43,7 @@ const linked = {
 beforeEach(() => {
   jest.clearAllMocks();
   mockTenant.mockReturnValue('team-a');
-  mockConversationFind.mockResolvedValue({ agent_id: null });
+  mockConversationFind.mockResolvedValue({ agent_id: null, endpoint: 'groq' });
   mockSelectionFind.mockResolvedValue(null);
   mockKbFind.mockResolvedValue([]);
   mockFileFind.mockResolvedValue([]);
@@ -60,10 +60,30 @@ describe('regular chat KB access (V4.2, fail closed)', () => {
     expect(mockKbFind).not.toHaveBeenCalled();
   });
   it('does not read KBs from an Agent conversation', async () => {
-    mockConversationFind.mockResolvedValueOnce({ agent_id: 'agent_owned' });
+    mockConversationFind.mockResolvedValueOnce({ agent_id: 'agent_owned', endpoint: 'agents' });
     expect(await resolveChatKnowledgeFiles(scope)).toEqual([]);
     expect(mockSelectionFind).not.toHaveBeenCalled();
   });
+  it('allows an owned Groq chat with stale agent_id to use its explicit KB selection', async () => {
+    mockConversationFind.mockResolvedValueOnce({
+      agent_id: 'agent_stale_from_previous_mode', endpoint: 'groq',
+    });
+    mockSelectionFind.mockResolvedValueOnce({
+      libraries: [{ kb_id: linked._id, tags: ['clinical'] }],
+    });
+    mockKbFind.mockResolvedValueOnce([linked]);
+    mockFileFind.mockResolvedValueOnce([{
+      file_id: 'immune', filename: 'immune.txt', user: 'owner-a',
+    }]);
+    expect(await resolveChatKnowledgeFiles(scope)).toEqual([{
+      file_id: 'immune', filename: 'immune.txt', user: 'owner-a', kbManaged: true,
+    }]);
+    expect(mockSelectionFind).toHaveBeenCalledWith({
+      owner: 'owner-a', tenantId: 'team-a', conversationId: 'chat-123',
+      agentId: REGULAR_CHAT_SCOPE,
+    });
+  });
+
   it('rejects nonexistent, foreign, temporary, or mismatched-tenant chat', async () => {
     mockConversationFind.mockResolvedValueOnce(null);
     expect(await resolveChatKnowledgeFiles(scope)).toEqual([]);
