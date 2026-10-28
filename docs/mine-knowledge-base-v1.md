@@ -466,3 +466,33 @@ Regression tests cover Groq chats with leftover `agent_id` for both the
 KB GET/PUT API and the regular chat retrieval authorization.
 
 This patch changes only source code; no historical conversations are rewritten.
+
+
+### V4.2 phase 1 patch — ephemeral runtime Agent needs regular-chat KB scope
+
+A read-only container diagnostic on 2026-10-28 for the owner's saved Groq
+chat confirmed:
+- `savedSelectionFound: true`, `selectedKBCount: 1`
+- `authorizedKBFileCount: 1`
+- `originalAgentVectorFiles: 1`
+
+The model may still say the file is unavailable because non-Agent endpoints
+are implemented with an **ephemeral runtime Agent** in
+`api/server/services/Endpoints/agents/build.js`. The File Search priming and
+tool execution paths previously used any nonempty runtime `agentId` to choose
+V3 Agent KB grant resolution, which rejects ephemeral identities. This is
+separate from the persisted conversation's stale `agent_id` fix.
+
+File Search now uses `isEphemeralAgentId` in BOTH priming and per-query
+reauthorization. Persisted Agents still use V3/V4.1 grant logic, while ephemeral
+runtime Agents use the saved regular-chat KB selection. Direct user-file access
+handling and original verified RAG namespaces remain unchanged. A saved,
+owner-authorized regular conversation and explicit KB selection are still
+required, and every retrieval is checked again.
+
+Regression tests check ephemeral priming, mid-turn revocation and a positive
+query to the verified original Agent RAG vector namespace with citation.
+This source patch does not change MongoDB data or rebuild embeddings.
+
+Local Mac tests and end-to-end validation remain required before marking the
+behavior confirmed.
