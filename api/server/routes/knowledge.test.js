@@ -72,7 +72,9 @@ const kb = { _id: KB_ID, name: 'Research', description: '', file_ids: [] };
 const withUser = (name) => request(app).get(name).set('x-user', 'owner-a');
 
 beforeEach(() => {
-  jest.clearAllMocks();
+  // resetAllMocks clears pending mockResolvedValueOnce / mockReturnValueOnce queues
+  // from earlier tests, whereas clearAllMocks only resets call history.
+  jest.resetAllMocks();
   mockGetTenantId.mockReturnValue('team-one');
   mockFind.mockResolvedValue([]);
   mockCount.mockResolvedValue(0);
