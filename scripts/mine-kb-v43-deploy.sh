@@ -48,12 +48,10 @@ check_container() {
   }
   local f
   for f in "${FILES[@]}"; do
-    if true; then
-      docker exec "$CONTAINER" test -f "/app/$f" || {
-        echo "ERROR: Existing container file missing: /app/$f" >&2
-        return 1
-      }
-    fi
+    docker exec "$CONTAINER" test -f "/app/$f" || {
+      echo "ERROR: Existing container file missing: /app/$f" >&2
+      return 1
+    }
   done
   echo "API container $CONTAINER is running; existing destinations verified."
 }
@@ -120,7 +118,7 @@ main() {
         if docker exec "$CONTAINER" test -f "/app/$f"; then
           mkdir -p "$backup_dir/$(dirname "$f")"
           docker cp "$CONTAINER:/app/$f" "$backup_dir/$f"
-        elif true; then
+        else
           echo "ERROR: Existing file disappeared during backup: $f" >&2
           return 1
         fi
