@@ -42,6 +42,7 @@ import ChatForm from './Input/ChatForm';
 import { TraceSurface } from './Trace';
 import Lia from '~/components/Lia';
 import Landing from './Landing';
+import { isSavedEmptyConversation } from './isSavedEmptyConversation';
 import Header from './Header';
 import { cn } from '~/utils';
 import store from '~/store';
@@ -147,9 +148,19 @@ function ChatView({
   useQueueDrain(index, conversationId, chatHelpers.ask, revealQueuedTurn);
 
   let content: JSX.Element | null | undefined;
+  // An owner-saved V4.3 chat may legitimately have ZERO messages before its
+  // first question. Show its ready composer instead of a perpetual spinner.
+  // Still spin while history or the active conversation is unresolved.
+  const savedEmptyChat = isSavedEmptyConversation({
+    conversationId,
+    activeConversationId: activeConversation?.conversationId,
+    messages,
+    isLoading,
+    routePending,
+  });
   const isLandingPage =
     (!messagesTree || messagesTree.length === 0) &&
-    (conversationId === Constants.NEW_CONVO || !conversationId);
+    (conversationId === Constants.NEW_CONVO || !conversationId || savedEmptyChat);
 
   /** The welcome screen carries the full footer unless the deployment turned it
    *  off; otherwise a footer bar renders only for configured content. */
