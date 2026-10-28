@@ -3,7 +3,7 @@ const { getTenantId, SYSTEM_TENANT_ID, logger } = require('@librechat/data-schem
 const { requireJwtAuth } = require('~/server/middleware');
 const { File, Agent, Conversation } = require('~/db/models');
 const ChatKnowledgeSelection = require('~/server/services/KnowledgeBase/chatSelection');
-const { REGULAR_CHAT_SCOPE } = require('~/server/services/KnowledgeBase/chatAccess');
+const { REGULAR_CHAT_SCOPE, isAgentKnowledgeConversation } = require('~/server/services/KnowledgeBase/chatAccess');
 const KnowledgeBase = require('~/server/services/KnowledgeBase/model');
 
 const router = express.Router();
@@ -180,12 +180,17 @@ async function authorizedChat(req, res, scope) {
     user: scope.owner,
     tenantId: scope.tenantId,
     isTemporary: { $ne: true },
-  }).select('agent_id').lean();
+  }).select('agent_id endpoint').lean();
   if (!conversation) {
     res.status(404).json({ error: 'Saved conversation not found.' });
     return null;
   }
-  if (conversation.agent_id) {
+  const agentMode = isAgentKnowledgeConversation(conversation);
+  if (agentMode && !conversation.agent_id) {
+    res.status(404).json({ error: 'Saved Agent conversation is missing an Agent ID.' });
+    return null;
+  }
+  if (agentMode) {
     const agent = await Agent.findOne({
       id: conversation.agent_id,
       author: scope.owner,
@@ -198,8 +203,8 @@ async function authorizedChat(req, res, scope) {
   }
   return {
     conversationId,
-    agentId: conversation.agent_id || null,
-    selectionScope: conversation.agent_id || REGULAR_CHAT_SCOPE,
+    agentId: agentMode ? conversation.agent_id : null,
+    selectionScope: agentMode ? conversation.agent_id : REGULAR_CHAT_SCOPE,
   };
 }
 
