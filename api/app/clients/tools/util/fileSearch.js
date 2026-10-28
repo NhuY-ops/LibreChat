@@ -205,7 +205,7 @@ const createFileSearchTool = async ({
       // even if a future helper build changes its empty-files behavior.
       if (!groups.size) {
         return [
-          'No files to search. This conversation has no authorized File Search sources.',
+          'No files to search. Instruct the user to add files for the search.',
           undefined,
         ];
       }
