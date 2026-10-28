@@ -444,3 +444,25 @@ Separately verify existing Agent V4.1 chats still work as before.
 **Next stage:** pre-first-message KB selection with fail-closed first-turn
 authorization and first-message persistence; ordinary chats that do not have
 the File Search tool enabled cannot retrieve KB content.
+
+
+### V4.2 phase 1 patch — stale Agent ID in a Groq/regular conversation
+
+A real local MongoDB diagnostic (2026-10-28) found a saved `Short Greeting`
+conversation with `endpoint: "groq"` but an old nonempty `agent_id`.
+Before the patch, both the picker and `authorizedChat` interpreted any
+nonempty `agent_id` as proof of an Agent chat. Thus the picker displayed
+Agent-only text and the API could return "Owned Agent not found" even for the
+owner's ordinary Groq chat.
+
+V4.2 now determines Agent-vs-regular mode from the conversation's **persisted
+endpoint**, not from the presence of stale Agent metadata. The UI uses its
+current endpoint to select picker mode. A real Agent endpoint with missing or
+unauthorized Agent still fails closed. Regular chats still require a saved,
+owned, non-temporary conversation and an explicit owner-KB selection. All
+V4.1 Agent grant narrowing, tenant isolation and RAG checks remain in place.
+
+Regression tests cover Groq chats with leftover `agent_id` for both the
+KB GET/PUT API and the regular chat retrieval authorization.
+
+This patch changes only source code; no historical conversations are rewritten.
