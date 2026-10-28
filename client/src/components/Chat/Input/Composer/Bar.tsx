@@ -2,6 +2,7 @@ import React, { memo, useMemo, useState, useCallback } from 'react';
 import * as Ariakit from '@ariakit/react';
 import { Mic, Plus, Check, Square, ChevronDown } from 'lucide-react';
 import { IconButton, TooltipAnchor, SendIcon } from '@librechat/client';
+import { isAgentsEndpoint } from 'librechat-data-provider';
 import type { TConversation, EModelEndpoint, EndpointFileConfig } from 'librechat-data-provider';
 import type { PaletteEntry, PaletteMode } from '~/hooks/Input/usePaletteEntries';
 import type { Dictation } from '~/hooks/Input/useDictation';
@@ -243,6 +244,9 @@ function Bar({
 }: BarProps) {
   const localize = useLocalize();
   const context = useBadgeRowContext();
+  // Switching models can leave agent_id on an otherwise ordinary conversation.
+  // Match the server's endpoint-based scope for this KB picker.
+  const kbAgentId = isAgentsEndpoint(endpoint ?? '') ? agentId : null;
   /* Latched on the palette's first open and never released: the skills catalog
      is only walked for composers whose palette was actually used, and closing
      it keeps the pages cached rather than refetching per open. */
@@ -425,10 +429,10 @@ function Bar({
             anchorRef={anchorRef}
           />
         </span>
-        {agentId && (
+        {(kbAgentId || showTools) && (
           <ChatKnowledgePicker
             conversationId={conversationId}
-            agentId={agentId}
+            agentId={kbAgentId}
             disabled={disabled || isSubmitting}
           />
         )}

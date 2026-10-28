@@ -394,3 +394,128 @@ should return HTTP 401. Additional routes respond with 401 when unauthenticated.
 
 V4.2 can add pre-first-message selection and separate non-Agent chat support
 with authenticated per-chat File Search and no reliance on an Agent's grants.
+
+
+## MINE KB V4.2 phase 1 — saved regular chat KB access (2026-10-24)
+
+This change is deliberately limited to existing **saved, non-temporary, owner-only
+regular conversations**. V4.1 saved Agent chats remain unchanged. It does
+**not** yet let a New Chat search selected KBs in its first message.
+
+- The composer now renders the Chat KB picker for regular chats with tools enabled,
+  using the existing popup portal fix. Unlike Agents, regular chats start with
+  **KB 0** and inherit no KBs.
+- GET/PUT `/api/knowledge/chat/:conversationId` distinguishes an owned Agent
+  conversation (V3 Agent grants) from an owned regular conversation (owned KBs
+  only). Existing Agent records keep their previous unique-index key.
+- Regular selections live in the same `minechatknowledgeselections` collection
+  with an internal `__mine_regular_chat__` key. The client cannot forge the
+  scope; it is determined by a server-side lookup of the owned conversation.
+- File Search resolves only explicitly selected KBs in saved regular chats.
+  It re-checks user, tenant, conversation, current membership/tags, embedded
+  status, expiry, and original Agent RAG namespace every invocation.
+  Turning KB off between priming and tool execution denies the KB file.
+- Direct user attachments are not changed. Shared conversations and temporary
+  chats cannot create or inherit regular KB selections.
+
+**Development validation (not a claim of execution):**
+
+```bash
+cd ~/mine-ai/api
+NODE_ENV=test npx jest --runInBand --coverage=false --watch=false \
+  server/routes/knowledge.test.js \
+  server/services/KnowledgeBase/agentAccess.spec.js \
+  server/services/KnowledgeBase/chatAccess.spec.js \
+  test/app/clients/tools/util/fileSearch.test.js
+cd ~/mine-ai/client
+npm run typecheck
+```
+
+Deploy after both pass using `scripts/mine-kb-v42-deploy.sh`, which backs up
+and copies exactly six backend JS files; it restarts only the API container.
+Do not reuse the old five-file V4.1 deploy script for this patch.
+
+**Manual test:** In a saved regular chat with File Search enabled, select
+`medical research`, save, ask a document question that does not reveal its
+answer, check File Search citation; disable KB and use a fresh regular chat
+with an explicit `KB 0` selection to verify the document cannot be searched.
+Separately verify existing Agent V4.1 chats still work as before.
+
+**Next stage:** pre-first-message KB selection with fail-closed first-turn
+authorization and first-message persistence; ordinary chats that do not have
+the File Search tool enabled cannot retrieve KB content.
+
+
+### V4.2 phase 1 patch — stale Agent ID in a Groq/regular conversation
+
+A real local MongoDB diagnostic (2026-10-28) found a saved `Short Greeting`
+conversation with `endpoint: "groq"` but an old nonempty `agent_id`.
+Before the patch, both the picker and `authorizedChat` interpreted any
+nonempty `agent_id` as proof of an Agent chat. Thus the picker displayed
+Agent-only text and the API could return "Owned Agent not found" even for the
+owner's ordinary Groq chat.
+
+V4.2 now determines Agent-vs-regular mode from the conversation's **persisted
+endpoint**, not from the presence of stale Agent metadata. The UI uses its
+current endpoint to select picker mode. A real Agent endpoint with missing or
+unauthorized Agent still fails closed. Regular chats still require a saved,
+owned, non-temporary conversation and an explicit owner-KB selection. All
+V4.1 Agent grant narrowing, tenant isolation and RAG checks remain in place.
+
+Regression tests cover Groq chats with leftover `agent_id` for both the
+KB GET/PUT API and the regular chat retrieval authorization.
+
+This patch changes only source code; no historical conversations are rewritten.
+
+
+### V4.2 phase 1 patch — ephemeral runtime Agent needs regular-chat KB scope
+
+A read-only container diagnostic on 2026-10-28 for the owner's saved Groq
+chat confirmed:
+- `savedSelectionFound: true`, `selectedKBCount: 1`
+- `authorizedKBFileCount: 1`
+- `originalAgentVectorFiles: 1`
+
+The model may still say the file is unavailable because non-Agent endpoints
+are implemented with an **ephemeral runtime Agent** in
+`api/server/services/Endpoints/agents/build.js`. The File Search priming and
+tool execution paths previously used any nonempty runtime `agentId` to choose
+V3 Agent KB grant resolution, which rejects ephemeral identities. This is
+separate from the persisted conversation's stale `agent_id` fix.
+
+File Search now uses `isEphemeralAgentId` in BOTH priming and per-query
+reauthorization. Persisted Agents still use V3/V4.1 grant logic, while ephemeral
+runtime Agents use the saved regular-chat KB selection. Direct user-file access
+handling and original verified RAG namespaces remain unchanged. A saved,
+owner-authorized regular conversation and explicit KB selection are still
+required, and every retrieval is checked again.
+
+Regression tests check ephemeral priming, mid-turn revocation and a positive
+query to the verified original Agent RAG vector namespace with citation.
+This source patch does not change MongoDB data or rebuild embeddings.
+
+Local Mac tests and end-to-end validation remain required before marking the
+behavior confirmed.
+ 
+
+### V4.2 KB0 explicit empty-source fence (2026-10-28)
+
+A saved Groq conversation labelled "Searching Knowledge Base" displayed KB 0 and
+an answer mentioning the old verification file. A read-only DB check for that
+chat found zero saved KB selections, zero user attachments and zero stored
+File Search resources. Since the DB observation occurs **after** the generation,
+it does not prove the exact per-turn authorized file set. A rendered
+"Searched your files" step alone also does not prove successful retrieval.
+
+Defense in depth: `createFileSearchTool` now returns an explicit no-files
+tool result when its authorized file groups are empty, instead of passing
+`files: []` to the generic `executeFileSearchQuery`. No RAG request or JWT
+is issued for this empty set even if the helper changes its semantics.
+Regression coverage includes ephemeral Groq KB0 priming and an empty query
+with neither RAG request nor token generation. This patch does not suppress
+the separate legitimate attachment or Project-file features.
+
+This is a **hardening patch, not a verified root-cause fix** for an old answer.
+Inspect the file-search tool result for the reported conversation and verify
+KB state *before* the turn if further evidence of historical leakage is needed.
+Do not declare KB0 end-to-end isolation PASS on a screenshot alone.
