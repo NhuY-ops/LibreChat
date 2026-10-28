@@ -273,6 +273,41 @@ describe('fileSearch.js - regular chat KB authorization', () => {
     resolveChatKnowledgeFiles.mockResolvedValue([]);
   });
 
+  it('keeps an unselected KB0 ephemeral chat empty without attachments', async () => {
+    const { getFiles } = require('~/models');
+    const { resolveAgentKnowledgeFiles } =
+      require('~/server/services/KnowledgeBase/agentAccess');
+    getFiles.mockResolvedValueOnce([]);
+    resolveChatKnowledgeFiles.mockResolvedValueOnce([]);
+    const primed = await primeFiles({
+      req: {
+        user: { id: 'owner', role: 'USER', tenantId: 'team-a' },
+        body: { conversationId: 'new-regular-chat' },
+      },
+      agentId: Constants.EPHEMERAL_AGENT_ID,
+      tool_resources: { file_search: { file_ids: [], files: [] } },
+    });
+    expect(primed.files).toEqual([]);
+    expect(resolveChatKnowledgeFiles).toHaveBeenCalledWith({
+      userId: 'owner', tenantId: 'team-a', conversationId: 'new-regular-chat',
+    });
+    expect(resolveAgentKnowledgeFiles).not.toHaveBeenCalled();
+  });
+
+  it('never passes an empty authorized KB0 file set to the RAG API', async () => {
+    const { generateShortLivedToken } = require('@librechat/api');
+    const tool = await createFileSearchTool({
+      userId: 'owner', tenantId: 'team-a', conversationId: 'new-regular-chat',
+      entity_id: Constants.EPHEMERAL_AGENT_ID,
+      files: [],
+    });
+    const [message, artifact] = await tool.func({ query: 'verify unseen KB sentence' });
+    expect(message).toMatch(/No files to search/);
+    expect(artifact).toBeUndefined();
+    expect(axios.post).not.toHaveBeenCalled();
+    expect(generateShortLivedToken).not.toHaveBeenCalled();
+  });
+
   it('adds only files authorized by regular chat selection at priming', async () => {
     resolveChatKnowledgeFiles.mockResolvedValueOnce([
       { file_id: 'kb-only', filename: 'research.txt', kbManaged: true },
