@@ -340,6 +340,44 @@ describe('fileSearch.js - regular chat KB authorization', () => {
     expect(generateShortLivedToken).not.toHaveBeenCalled();
   });
 
+  it('searches original Agent embedding namespace for selected KB in a Groq chat', async () => {
+    const axios = require('axios');
+    const { generateShortLivedToken } = require('@librechat/api');
+    const prior = process.env.RAG_API_URL;
+    process.env.RAG_API_URL = 'http://localhost:8000';
+    try {
+      resolveChatKnowledgeFiles.mockResolvedValueOnce([{
+        file_id: 'chat-kb', filename: 'research.txt', kbManaged: true,
+        ragEntityId: 'agent_original',
+      }]);
+      generateShortLivedToken.mockReturnValue('test-jwt');
+      axios.post.mockResolvedValueOnce({ data: [[{
+        page_content: 'Unique verification phrase: silver lantern research sample 2026.',
+        metadata: { source: '/research.txt' },
+      }, 0.1]] });
+      const tool = await createFileSearchTool({
+        userId: 'owner', tenantId: 'team-a', conversationId: 'chat-456',
+        entity_id: Constants.EPHEMERAL_AGENT_ID,
+        files: [{
+          file_id: 'chat-kb', filename: 'research.txt',
+          kbManaged: true, ragEntityId: 'agent_original', fromAgent: true,
+        }],
+        fileCitations: true,
+      });
+      const [content, artifact] = await tool.func({ query: 'verification sentence' });
+      const queries = axios.post.mock.calls.filter(([url]) => url.endsWith('/query'));
+      expect(queries.map(([, body]) => body)).toEqual([{
+        file_id: 'chat-kb', query: 'verification sentence', k: 5,
+        entity_id: 'agent_original',
+      }]);
+      expect(content).toContain('silver lantern research sample 2026');
+      expect(artifact.file_search.sources).toHaveLength(1);
+    } finally {
+      if (prior == null) delete process.env.RAG_API_URL;
+      else process.env.RAG_API_URL = prior;
+    }
+  });
+
   it('rechecks saved chat access and drops KB sources if deselected mid-turn', async () => {
     const { generateShortLivedToken } = require('@librechat/api');
     const tool = await createFileSearchTool({
