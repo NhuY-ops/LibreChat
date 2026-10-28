@@ -496,3 +496,26 @@ This source patch does not change MongoDB data or rebuild embeddings.
 
 Local Mac tests and end-to-end validation remain required before marking the
 behavior confirmed.
+ 
+
+### V4.2 KB0 explicit empty-source fence (2026-10-28)
+
+A saved Groq conversation labelled "Searching Knowledge Base" displayed KB 0 and
+an answer mentioning the old verification file. A read-only DB check for that
+chat found zero saved KB selections, zero user attachments and zero stored
+File Search resources. Since the DB observation occurs **after** the generation,
+it does not prove the exact per-turn authorized file set. A rendered
+"Searched your files" step alone also does not prove successful retrieval.
+
+Defense in depth: `createFileSearchTool` now returns an explicit no-files
+tool result when its authorized file groups are empty, instead of passing
+`files: []` to the generic `executeFileSearchQuery`. No RAG request or JWT
+is issued for this empty set even if the helper changes its semantics.
+Regression coverage includes ephemeral Groq KB0 priming and an empty query
+with neither RAG request nor token generation. This patch does not suppress
+the separate legitimate attachment or Project-file features.
+
+This is a **hardening patch, not a verified root-cause fix** for an old answer.
+Inspect the file-search tool result for the reported conversation and verify
+KB state *before* the turn if further evidence of historical leakage is needed.
+Do not declare KB0 end-to-end isolation PASS on a screenshot alone.
