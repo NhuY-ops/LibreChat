@@ -208,6 +208,38 @@ async function authorizedChat(req, res, scope) {
   };
 }
 
+/**
+ * V4.3 first-message preparation, phase A: enumerate ONLY the owner's
+ * private KBs while the composer still shows New Chat. No KB grant is
+ * created by this read endpoint; a first-turn admission/persistence
+ * handshake is required before any file can reach RAG.
+ *
+ * Keep the route above the parameterized /chat/:conversationId matcher.
+ */
+router.get('/chat/new/available', async (req, res) => {
+  const scope = requestScope(req, res);
+  if (!scope) return;
+  try {
+    const libraries = await KnowledgeBase.find(scope)
+      .sort({ updatedAt: -1 })
+      .limit(MAX_LIBRARIES)
+      .lean();
+    return res.json({
+      available: libraries.map((kb) => ({
+        kb_id: String(kb._id),
+        name: kb.name,
+        file_count: kb.file_ids?.length ?? 0,
+        agent_tags: [],
+      })),
+      selected: [],
+      inherited: false,
+      pending: true,
+    });
+  } catch (error) {
+    return failed(res, error);
+  }
+});
+
 router.get('/chat/:conversationId', async (req, res) => {
   const scope = requestScope(req, res);
   if (!scope) return;
