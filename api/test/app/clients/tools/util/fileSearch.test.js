@@ -1,5 +1,5 @@
 const axios = require('axios');
-const { ResourceType } = require('librechat-data-provider');
+const { ResourceType, Constants, isEphemeralAgentId } = require('librechat-data-provider');
 
 jest.mock('axios');
 jest.mock('@librechat/api', () => {
@@ -290,6 +290,54 @@ describe('fileSearch.js - regular chat KB authorization', () => {
     expect(resolveChatKnowledgeFiles).toHaveBeenCalledWith({
       userId: 'owner', tenantId: 'team-a', conversationId: 'chat-456',
     });
+  });
+
+  it('uses selected chat KBs for ephemeral Groq runtime Agent at priming', async () => {
+    const { resolveAgentKnowledgeFiles } =
+      require('~/server/services/KnowledgeBase/agentAccess');
+    expect(isEphemeralAgentId(Constants.EPHEMERAL_AGENT_ID)).toBe(true);
+    resolveChatKnowledgeFiles.mockResolvedValueOnce([
+      { file_id: 'chat-kb', filename: 'research.txt', kbManaged: true,
+        ragEntityId: 'agent_original' },
+    ]);
+    const primed = await primeFiles({
+      req: {
+        user: { id: 'owner', role: 'USER', tenantId: 'team-a' },
+        body: { conversationId: 'chat-456' },
+      },
+      agentId: Constants.EPHEMERAL_AGENT_ID,
+      tool_resources: { file_search: { file_ids: [] } },
+    });
+    expect(primed.files).toEqual([{
+      file_id: 'chat-kb', filename: 'research.txt',
+      fromAgent: true, kbManaged: true, ragEntityId: 'agent_original',
+    }]);
+    expect(resolveChatKnowledgeFiles).toHaveBeenCalledWith({
+      userId: 'owner', tenantId: 'team-a', conversationId: 'chat-456',
+    });
+    expect(resolveAgentKnowledgeFiles).not.toHaveBeenCalled();
+  });
+
+  it('reauthorizes ephemeral runtime KBs through chat selection, not Agent grants', async () => {
+    const { resolveAgentKnowledgeFiles } =
+      require('~/server/services/KnowledgeBase/agentAccess');
+    const { generateShortLivedToken } = require('@librechat/api');
+    const tool = await createFileSearchTool({
+      userId: 'owner', tenantId: 'team-a', conversationId: 'chat-456',
+      entity_id: Constants.EPHEMERAL_AGENT_ID,
+      files: [{
+        file_id: 'chat-kb', filename: 'research.txt',
+        kbManaged: true, ragEntityId: 'agent_original', fromAgent: true,
+      }],
+    });
+    resolveChatKnowledgeFiles.mockResolvedValueOnce([]);
+    const [result] = await tool.func({ query: 'research pilot sentence' });
+    expect(result).toMatch(/No files to search/);
+    expect(resolveChatKnowledgeFiles).toHaveBeenCalledWith({
+      userId: 'owner', tenantId: 'team-a', conversationId: 'chat-456',
+    });
+    expect(resolveAgentKnowledgeFiles).not.toHaveBeenCalled();
+    expect(generateShortLivedToken).not.toHaveBeenCalled();
   });
 
   it('rechecks saved chat access and drops KB sources if deselected mid-turn', async () => {
