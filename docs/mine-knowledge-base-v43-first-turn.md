@@ -111,3 +111,28 @@ Remaining acceptance gates:
 - Improve draft migration and optional UX polish after functional validation.
 
 Do not deploy this branch before the Mac tests and independent review.
+
+
+## Empty saved conversation spinner fix (2026-10-28)
+
+After a successful New Chat "Prepare chat with KBs", the router navigated to an
+already-saved conversation with **zero** messages. Old ChatView logic
+`isNavigating = !messagesTree && conversationId != null` treated *every* empty
+saved chat as if it were still fetching, and showed a permanent spinner.
+
+The V4.3 frontend now recognizes an empty saved conversation only when its
+message query has finished, the active conversation ID matches the current
+route, and there is no outstanding routePending state. It renders the normal
+landing composer while preserving the already-saved ID. A missing/mismatched
+conversation, unresolved message query, or history still loading remains in
+the old guarded spinner path. The first real message still sends to the
+prepared conversation; no dummy greeting is needed.
+
+Files added/changed:
+- `client/src/components/Chat/isSavedEmptyConversation.ts`
+- `client/src/components/Chat/isSavedEmptyConversation.test.ts`
+- `client/src/components/Chat/ChatView.tsx`
+
+This change is frontend-only and requires local Mac Jest (client) and
+typecheck before being called tested. Do not rerun backend V4.3 deploy simply
+for this frontend change; the running API remains unchanged.
