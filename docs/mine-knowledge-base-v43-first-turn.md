@@ -1,6 +1,6 @@
 # MINE Knowledge Base V4.3 — first-message selection
 
-Status: **design + owner-scoped catalog only**, NOT an end-to-end implementation.
+Status: **phase B source drafted; tests and Mac acceptance pending. NOT deployed.**
 Branch: `mine-kb-v43-first-turn-20261028` (stacked on V4.2).
 
 ## Verified starting point (2026-10-28)
@@ -77,3 +77,37 @@ with the following invariants:
 is preparatory and is not connected to New Chat yet. Continue implementation
 of Phase B and frontend integration, run complete tests, then prepare a new
 backed-up and reversible deployment script.
+
+
+## Phase B source implementation update (2026-10-28)
+
+The source branch now includes POST `/api/knowledge/chat/prepare`.
+It verifies the authenticated owner and tenant; accepts only a regular
+(non-Agent/non-Assistant) endpoint, a selected model, a random UUID retry key,
+and up to 50 authorized owner-owned KB IDs with normalized tag filters.
+It derives a stable owner-scoped conversation ID from the retry key,
+inserts an owned non-temporary conversation with `$setOnInsert`, then inserts
+the regular-chat KB selection using `$setOnInsert`. A conflicting retry does
+not modify the existing model or selected KBs. It returns a conversation ID
+only after the saved selection matches. A failed selection write leaves at
+most an unusable blank chat with no KB grant; it cannot authorize RAG.
+
+The New Chat KB picker can now list owner KBs and "Prepare chat with KBs";
+it calls this endpoint, navigates to the saved chat and lets the user type
+their first actual question with KB already selected. The MVP blocks
+preparation if the unsent text field is nonempty, rather than silently
+discarding the text when navigating; **select KBs before typing**.
+This is not an automatic send feature.
+
+New route tests cover valid preparation, owner authorization, retries,
+rejected foreign KBs, conflict handling, and failed writes. These tests
+are written but **have not been run on the developer Mac**.
+
+Remaining acceptance gates:
+- Run Jest and client typecheck on Mac; fix failures before deploy.
+- Confirm API can create a valid empty conversation the existing app loads.
+- Confirm New Chat -> select KB -> prepare -> first prompt -> file citation.
+- Confirm KB0 never sends unscoped RAG requests and Agent V4.2 still works.
+- Improve draft migration and optional UX polish after functional validation.
+
+Do not deploy this branch before the Mac tests and independent review.
