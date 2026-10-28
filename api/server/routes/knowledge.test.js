@@ -81,7 +81,7 @@ beforeEach(() => {
   mockFileFindOne.mockResolvedValue({ _id: 'file-mongo-id' });
   mockFileFind.mockResolvedValue([]);
   mockAgentFindOne.mockResolvedValue({ _id: 'valid-agent' });
-  mockConvoFindOne.mockResolvedValue({ agent_id: 'agent_abc123' });
+  mockConvoFindOne.mockResolvedValue({ agent_id: 'agent_abc123', endpoint: 'agents' });
   mockChatSelectionFindOne.mockResolvedValue(null);
   mockChatSelectionUpsert.mockResolvedValue({});
 
@@ -168,7 +168,7 @@ describe('MINE KB V4.2 regular saved chat selection', () => {
   const selected = [{ kb_id: KB_ID, tags: ['clinical'] }];
 
   beforeEach(() => {
-    mockConvoFindOne.mockResolvedValue({ agent_id: null });
+    mockConvoFindOne.mockResolvedValue({ agent_id: null, endpoint: 'groq' });
   });
 
   it('shows owned libraries but inherits NO KBs by default', async () => {
@@ -181,6 +181,36 @@ describe('MINE KB V4.2 regular saved chat selection', () => {
     expect(mockFind).toHaveBeenCalledWith({
       owner: 'owner-a', tenantId: 'team-one',
     });
+  });
+
+  it('treats Groq chat with stale agent_id as regular, without requiring Agent ownership', async () => {
+    mockConvoFindOne.mockResolvedValueOnce({
+      endpoint: 'groq', agent_id: 'agent_stale_from_model_switch',
+    });
+    mockFind.mockResolvedValueOnce([{ ...kb, agent_access: [] }]);
+    const res = await request(app).get(route);
+    expect(res.status).toBe(200);
+    expect(res.body.selected).toEqual([]);
+    expect(res.body.available).toHaveLength(1);
+    expect(mockAgentFindOne).not.toHaveBeenCalled();
+    expect(mockChatSelectionFindOne).toHaveBeenCalledWith({
+      owner: 'owner-a', tenantId: 'team-one',
+      conversationId: 'regular-chat', agentId: '__mine_regular_chat__',
+    });
+  });
+
+  it('saves a selection in Groq chat with stale agent_id to regular-chat scope', async () => {
+    mockConvoFindOne.mockResolvedValueOnce({
+      endpoint: 'groq', agent_id: 'agent_stale_from_model_switch',
+    });
+    mockFind.mockResolvedValueOnce([{ _id: KB_ID }]);
+    const res = await request(app).put(route).send({ libraries: selected });
+    expect(res.status).toBe(200);
+    expect(mockChatSelectionUpsert).toHaveBeenCalledWith({
+      owner: 'owner-a', tenantId: 'team-one',
+      conversationId: 'regular-chat', agentId: '__mine_regular_chat__',
+    }, { $set: { libraries: selected } }, expect.objectContaining({ upsert: true }));
+    expect(mockAgentFindOne).not.toHaveBeenCalled();
   });
 
   it('saves user-owned KB selection without granting Agent access', async () => {
