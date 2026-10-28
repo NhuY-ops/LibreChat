@@ -173,8 +173,10 @@ export default function ChatKnowledgePicker({
           ...conversation,
           title: 'New Chat',
           conversationId: prepared.conversationId,
-          endpoint: prepared.endpoint,
-          model: prepared.model,
+          // Preserve the already typed TConversation endpoint. The server
+          // validated that prepared.endpoint/model match these inputs.
+          endpoint: conversation.endpoint,
+          model: conversation.model,
           agent_id: undefined,
         }, { currentConvoId: conversationId });
       } else {
