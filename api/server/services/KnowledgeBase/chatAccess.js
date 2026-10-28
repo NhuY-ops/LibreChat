@@ -1,4 +1,5 @@
 const { getTenantId, SYSTEM_TENANT_ID, logger } = require('@librechat/data-schemas');
+const { isAgentsEndpoint } = require('librechat-data-provider');
 const { Agent, Conversation, File } = require('~/db/models');
 const KnowledgeBase = require('./model');
 const ChatKnowledgeSelection = require('./chatSelection');
@@ -8,6 +9,12 @@ const ChatKnowledgeSelection = require('./chatSelection');
 const REGULAR_CHAT_SCOPE = '__mine_regular_chat__';
 const MAX_KB_FILES_PER_TURN = 500;
 const CONVERSATION_ID_PATTERN = /^[a-zA-Z0-9_-]{1,150}$/;
+
+// Model changes may preserve a stale agent_id on a Groq/OpenAI/etc chat.
+// The persisted endpoint, not this leftover field, owns chat mode.
+function isAgentKnowledgeConversation(conversation) {
+  return Boolean(conversation && isAgentsEndpoint(conversation.endpoint));
+}
 
 /**
  * Return ONLY files explicitly selected by the owner of an existing, saved,
@@ -30,9 +37,10 @@ async function resolveChatKnowledgeFiles({ userId, tenantId, conversationId }) {
       user: scope.owner,
       tenantId: scope.tenantId,
       isTemporary: { $ne: true },
-    }).select('agent_id').lean();
-    // An Agent chat remains controlled exclusively by V3/V4.1 Agent grants.
-    if (!conversation || conversation.agent_id) return [];
+    }).select('agent_id endpoint').lean();
+    // Agents remain controlled exclusively by V3/V4.1 grants. A stale
+    // agent_id in a regular conversation must not disable its own KB picker.
+    if (!conversation || isAgentKnowledgeConversation(conversation)) return [];
 
     const selection = await ChatKnowledgeSelection.findOne({
       ...scope, conversationId, agentId: REGULAR_CHAT_SCOPE,
@@ -100,4 +108,4 @@ async function resolveChatKnowledgeFiles({ userId, tenantId, conversationId }) {
   }
 }
 
-module.exports = { REGULAR_CHAT_SCOPE, resolveChatKnowledgeFiles };
+module.exports = { REGULAR_CHAT_SCOPE, isAgentKnowledgeConversation, resolveChatKnowledgeFiles };
