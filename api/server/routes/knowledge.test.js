@@ -12,6 +12,7 @@ const mockFileFindOne = jest.fn();
 const mockFileFind = jest.fn();
 const mockAgentFindOne = jest.fn();
 const mockConvoFindOne = jest.fn();
+const mockConvoUpsert = jest.fn();
 const mockChatSelectionFindOne = jest.fn();
 const mockChatSelectionUpsert = jest.fn();
 
@@ -29,6 +30,7 @@ jest.mock('~/db/models', () => ({
   },
   Conversation: {
     findOne: (...args) => ({ select: () => ({ lean: () => mockConvoFindOne(...args) }) }),
+    findOneAndUpdate: (...args) => mockConvoUpsert(...args),
   },
   File: {
     findOne: (...args) => ({
@@ -70,7 +72,9 @@ const kb = { _id: KB_ID, name: 'Research', description: '', file_ids: [] };
 const withUser = (name) => request(app).get(name).set('x-user', 'owner-a');
 
 beforeEach(() => {
-  jest.clearAllMocks();
+  // resetAllMocks clears pending mockResolvedValueOnce / mockReturnValueOnce queues
+  // from earlier tests, whereas clearAllMocks only resets call history.
+  jest.resetAllMocks();
   mockGetTenantId.mockReturnValue('team-one');
   mockFind.mockResolvedValue([]);
   mockCount.mockResolvedValue(0);
@@ -82,6 +86,7 @@ beforeEach(() => {
   mockFileFind.mockResolvedValue([]);
   mockAgentFindOne.mockResolvedValue({ _id: 'valid-agent' });
   mockConvoFindOne.mockResolvedValue({ agent_id: 'agent_abc123', endpoint: 'agents' });
+  mockConvoUpsert.mockImplementation((_, update) => Promise.resolve(update.$setOnInsert));
   mockChatSelectionFindOne.mockResolvedValue(null);
   mockChatSelectionUpsert.mockResolvedValue({});
 
@@ -160,6 +165,114 @@ describe('MINE Chat KB V4 routes (restrict existing Agent grants)', () => {
     });
     expect(result.status).toBe(400);
     expect(mockChatSelectionUpsert).not.toHaveBeenCalled();
+  });
+});
+
+describe('MINE KB V4.3 idempotent prepare before first turn', () => {
+  const url = '/api/knowledge/chat/prepare';
+  const requestKey = '4c8acbf8-71e7-48d6-a152-9d77edaa9371';
+  const base = { requestKey, endpoint: 'groq', model: 'openai/gpt-oss-20b' };
+  it('prepares an owned conversation and empty selection before returning success', async () => {
+    mockChatSelectionUpsert.mockResolvedValueOnce({ libraries: [] });
+    const result = await request(app).post(url).send({ ...base, libraries: [] });
+    expect(result.status).toBe(201);
+    expect(result.body.conversationId).toMatch(/^[a-f0-9-]{36}$/);
+    expect(result.body.selected).toEqual([]);
+    expect(mockConvoUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({ user: 'owner-a', tenantId: 'team-one',
+        conversationId: result.body.conversationId }),
+      { $setOnInsert: expect.objectContaining({ endpoint: 'groq',
+        model: 'openai/gpt-oss-20b', isTemporary: false }) },
+      expect.objectContaining({ upsert: true }),
+    );
+    expect(mockChatSelectionUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({ conversationId: result.body.conversationId,
+        agentId: '__mine_regular_chat__', owner: 'owner-a', tenantId: 'team-one' }),
+      { $setOnInsert: { libraries: [] } },
+      expect.objectContaining({ upsert: true }),
+    );
+  });
+  it('persists a validated KB grant before returning prepared chat ID', async () => {
+    const libraries = [{ kb_id: KB_ID, tags: ['clinical'] }];
+    mockFind.mockResolvedValueOnce([{ _id: KB_ID }]);
+    mockChatSelectionUpsert.mockResolvedValueOnce({ libraries });
+    const result = await request(app).post(url).send({ ...base, libraries });
+    expect(result.status).toBe(201);
+    expect(result.body.selected).toEqual(libraries);
+    expect(mockFind).toHaveBeenCalledWith({
+      owner: 'owner-a', tenantId: 'team-one', _id: { $in: [KB_ID] },
+    });
+  });
+  it('binds retries to a stable id and a different owner gets a different ID', async () => {
+    const first = await request(app).post(url).send({ ...base, libraries: [] });
+    const again = await request(app).post(url).send({ ...base, libraries: [] });
+    const other = await request(app).post(url).set('x-user', 'another-owner')
+      .send({ ...base, libraries: [] });
+    expect(first.status).toBe(201);
+    expect(again.body.conversationId).toBe(first.body.conversationId);
+    expect(other.body.conversationId).not.toBe(first.body.conversationId);
+  });
+  it('rejects foreign KBs, malformed keys and agent endpoint without preparing a chat', async () => {
+    const invalid = await request(app).post(url).send({ ...base, requestKey: 'bad', libraries: [] });
+    const agent = await request(app).post(url).send({ ...base, endpoint: 'agents', libraries: [] });
+    mockFind.mockResolvedValueOnce([]);
+    const forbidden = await request(app).post(url)
+      .send({ ...base, libraries: [{ kb_id: KB_ID, tags: [] }] });
+    expect(invalid.status).toBe(400);
+    expect(agent.status).toBe(400);
+    expect(forbidden.status).toBe(403);
+    expect(mockConvoUpsert).not.toHaveBeenCalled();
+    expect(mockChatSelectionUpsert).not.toHaveBeenCalled();
+  });
+  it('does not replace an existing KB selection with a changed retry payload', async () => {
+    const submitted = [{ kb_id: KB_ID, tags: [] }];
+    mockFind.mockResolvedValueOnce([{ _id: KB_ID }]);
+    mockChatSelectionUpsert.mockResolvedValueOnce({ libraries: [] });
+    const result = await request(app).post(url).send({ ...base, libraries: submitted });
+    expect(result.status).toBe(409);
+  });
+  it('does not return an authorized chat when selection write fails', async () => {
+    mockChatSelectionUpsert.mockRejectedValueOnce(new Error('unavailable'));
+    const result = await request(app).post(url).send({ ...base, libraries: [] });
+    expect(result.status).toBe(500);
+    expect(result.body.conversationId).toBeUndefined();
+  });
+});
+
+describe('MINE KB V4.3 New Chat catalog (read-only)', () => {
+  it('shows only owner-scoped KB metadata without granting any selection', async () => {
+    mockFind.mockResolvedValueOnce([
+      { _id: KB_ID, name: 'Research', file_ids: [FILE_ID] },
+    ]);
+    const result = await request(app).get('/api/knowledge/chat/new/available');
+    expect(result.status).toBe(200);
+    expect(result.body).toEqual({
+      available: [{
+        kb_id: KB_ID, name: 'Research', file_count: 1, agent_tags: [],
+      }],
+      selected: [],
+      inherited: false,
+      pending: true,
+    });
+    expect(mockFind).toHaveBeenCalledWith({
+      owner: 'owner-a', tenantId: 'team-one',
+    });
+    expect(mockChatSelectionUpsert).not.toHaveBeenCalled();
+    expect(mockConvoFindOne).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when the current request has no valid tenant scope', async () => {
+    mockGetTenantId.mockReturnValueOnce('__SYSTEM__');
+    const result = await request(app).get('/api/knowledge/chat/new/available');
+    expect(result.status).toBe(403);
+    expect(mockFind).not.toHaveBeenCalled();
+  });
+
+  it('never interprets a New Chat catalog request as a saved conversation', async () => {
+    const result = await request(app).get('/api/knowledge/chat/new/available');
+    expect(result.status).toBe(200);
+    expect(result.body.selected).toEqual([]);
+    expect(mockConvoFindOne).not.toHaveBeenCalled();
   });
 });
 

@@ -2,8 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, Database } from 'lucide-react';
-import { apiBaseUrl, request } from 'librechat-data-provider';
+import { Constants, apiBaseUrl, request } from 'librechat-data-provider';
+import type { TConversation } from 'librechat-data-provider';
 import { useAuthContext } from '~/hooks';
+import { useApplyNewAgentTemplate, useGetEphemeralAgent } from '~/store';
+import { useChatFormContext } from '~/Providers';
+import useNavigateToConvo from '~/hooks/Conversations/useNavigateToConvo';
+import { persistPreparedChatTools } from './persistPreparedChatTools';
 
 type AvailableLibrary = {
   kb_id: string;
@@ -21,6 +26,8 @@ type DraftValue = { enabled: boolean; tags: string };
 
 const url = (conversationId: string) =>
   `${apiBaseUrl()}/api/knowledge/chat/${encodeURIComponent(conversationId)}`;
+const newCatalogUrl = () => `${apiBaseUrl()}/api/knowledge/chat/new/available`;
+const prepareUrl = () => `${apiBaseUrl()}/api/knowledge/chat/prepare`;
 
 function parseTags(text: string): string[] | null {
   const tags = [...new Set(text.split(',')
@@ -31,28 +38,38 @@ function parseTags(text: string): string[] | null {
 }
 
 /**
- * V4.2: saved Agent chat selections narrow V3 grants, while saved regular
- * chats can explicitly opt into owner-owned KBs. Both are reauthorized at
- * File Search time. Unsaved chats are not eligible in this phase.
+ * V4.3: New regular chats can prepare a saved, owner-authorized KB selection
+ * before the first message. Existing Agent/regular chats retain V4.2 behavior.
+ * The prepare endpoint returns a ready conversation only after saving the KB set.
  */
 export default function ChatKnowledgePicker({
   conversationId,
   agentId,
+  conversation,
+  index,
   disabled = false,
 }: {
   conversationId: string;
   agentId?: string | null;
+  conversation?: TConversation | null;
+  index: number;
   disabled?: boolean;
 }) {
   const { user } = useAuthContext();
   const queryClient = useQueryClient();
+  const form = useChatFormContext();
+  const { navigateToConvo } = useNavigateToConvo(index);
+  const applyNewAgentTemplate = useApplyNewAgentTemplate();
+  const getEphemeralAgent = useGetEphemeralAgent();
   const principal = user?.id ?? '';
-  const ready = Boolean(principal && conversationId &&
-    conversationId !== 'new' && conversationId !== '00000000-0000-0000-0000-000000000000');
+  const isNew = conversationId === 'new' || conversationId === Constants.NEW_CONVO;
+  const prepareNew = isNew && !agentId;
+  const ready = Boolean(principal && conversationId && (!isNew || prepareNew));
   const queryKey = ['mineChatKB', principal, conversationId, agentId];
+  const requestKey = useRef<string>(crypto.randomUUID());
   const query = useQuery<ChatKnowledgeSettings>(
     queryKey,
-    () => request.get(url(conversationId)),
+    () => request.get(prepareNew ? newCatalogUrl() : url(conversationId)),
     { enabled: ready, retry: false, refetchOnWindowFocus: false },
   );
   const [open, setOpen] = useState(false);
@@ -131,12 +148,58 @@ export default function ChatKnowledgePicker({
     setPending(true);
     setError('');
     try {
-      await request.put(url(conversationId), { libraries });
-      await queryClient.invalidateQueries(queryKey);
-      setOpen(false);
+      if (prepareNew) {
+        if (!conversation?.endpoint || !conversation?.model) {
+          setError('Choose a model before preparing the first KB-enabled chat.');
+          return;
+        }
+        // Preparing a chat navigates away from the shared "new" draft. Never
+        // silently discard text the user already typed in that draft.
+        if (form.getValues('text')?.trim()) {
+          setError('Save or copy your unsent text, then clear it and select KBs before typing your first message.');
+          return;
+        }
+        const prepared: { conversationId: string; endpoint: string; model: string } =
+          await request.post(prepareUrl(), {
+            requestKey: requestKey.current,
+            endpoint: conversation.endpoint,
+            model: conversation.model,
+            libraries,
+          });
+        if (!prepared?.conversationId) throw new Error('No prepared conversation ID returned.');
+        queryClient.setQueryData(['mineChatKB', principal, prepared.conversationId, null], {
+          available: query.data.available,
+          selected: libraries,
+          inherited: false,
+        });
+        // Copy tool choices both in memory AND into per-conversation storage
+        // before navigating; otherwise File Search may turn off on refresh.
+        // A selected KB alone must not auto-enable any tool.
+        const sourceAgent = getEphemeralAgent(conversationId);
+        await applyNewAgentTemplate(prepared.conversationId, conversationId, sourceAgent);
+        persistPreparedChatTools(prepared.conversationId, sourceAgent);
+        setOpen(false);
+        navigateToConvo({
+          ...conversation,
+          title: 'New Chat',
+          conversationId: prepared.conversationId,
+          // Preserve the already typed TConversation endpoint. The server
+          // validated that prepared.endpoint/model match these inputs.
+          endpoint: conversation.endpoint,
+          model: conversation.model,
+          agent_id: undefined,
+        });
+        // New Chat has no previous saved conversation to invalidate.
+        // Passing its sentinel ID as currentConvoId also incorrectly widens
+        // the type to the mixed string/number Constants enum.
+      } else {
+        await request.put(url(conversationId), { libraries });
+        await queryClient.invalidateQueries(queryKey);
+        setOpen(false);
+      }
     } catch (caught) {
-      const failure = caught as { response?: { data?: { error?: string } } };
-      setError(failure.response?.data?.error ?? 'Could not save Chat Knowledge Bases.');
+      const failure = caught as { response?: { data?: { error?: string } }; message?: string };
+      setError(failure.response?.data?.error ?? failure.message ?? 'Could not save Chat Knowledge Bases.');
     } finally {
       setPending(false);
     }
@@ -151,7 +214,7 @@ export default function ChatKnowledgePicker({
         aria-label="Chat Knowledge Bases"
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
-        title={ready ? 'Choose Knowledge Bases for this chat' : 'Send the first message to enable Chat KBs'}
+        title={ready ? (prepareNew ? 'Choose KBs before your first message' : 'Choose Knowledge Bases for this chat') : 'Start a saved Agent chat to enable KBs'}
         className="border-border-medium text-text-secondary hover:bg-surface-hover flex items-center gap-1 rounded-lg border px-2 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
       >
         <Database className="size-3.5" aria-hidden="true" />
@@ -174,7 +237,7 @@ export default function ChatKnowledgePicker({
               className="text-text-secondary text-xs">Close</button>
           </div>
           <p className="text-text-secondary mt-1 text-xs">
-            {agentId ? 'Only libraries already granted to this Agent.' : 'Choose your own private Knowledge Bases.'} Changes apply to this chat only.
+            {agentId ? 'Only libraries already granted to this Agent.' : prepareNew ? 'Choose private KBs now, then type your first message in the prepared chat.' : 'Choose your own private Knowledge Bases.'} Changes apply to this chat only.
           </p>
           {query.isLoading ? (
             <p role="status" className="text-text-secondary py-3 text-xs">Loading KBs…</p>
@@ -230,7 +293,7 @@ export default function ChatKnowledgePicker({
             <button type="button" onClick={() => void save()}
               disabled={pending || !query.data}
               className="bg-surface-tertiary text-text-primary hover:bg-surface-hover rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50">
-              {pending ? 'Saving…' : 'Save for this chat'}
+              {pending ? 'Saving…' : prepareNew ? 'Prepare chat with KBs' : 'Save for this chat'}
             </button>
           </div>
         </div>,

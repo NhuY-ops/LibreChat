@@ -1,4 +1,5 @@
 const express = require('express');
+const crypto = require('crypto');
 const { getTenantId, SYSTEM_TENANT_ID, logger } = require('@librechat/data-schemas');
 const { requireJwtAuth } = require('~/server/middleware');
 const { File, Agent, Conversation } = require('~/db/models');
@@ -207,6 +208,130 @@ async function authorizedChat(req, res, scope) {
     selectionScope: agentMode ? conversation.agent_id : REGULAR_CHAT_SCOPE,
   };
 }
+
+/**
+ * V4.3 first-message preparation, phase A: enumerate ONLY the owner's
+ * private KBs while the composer still shows New Chat. No KB grant is
+ * created by this read endpoint; a first-turn admission/persistence
+ * handshake is required before any file can reach RAG.
+ *
+ * Keep the route above the parameterized /chat/:conversationId matcher.
+ */
+router.get('/chat/new/available', async (req, res) => {
+  const scope = requestScope(req, res);
+  if (!scope) return;
+  try {
+    const libraries = await KnowledgeBase.find(scope)
+      .sort({ updatedAt: -1 })
+      .limit(MAX_LIBRARIES)
+      .lean();
+    return res.json({
+      available: libraries.map((kb) => ({
+        kb_id: String(kb._id),
+        name: kb.name,
+        file_count: kb.file_ids?.length ?? 0,
+        agent_tags: [],
+      })),
+      selected: [],
+      inherited: false,
+      pending: true,
+    });
+  } catch (error) {
+    return failed(res, error);
+  }
+});
+
+/**
+ * V4.3: Prepare a real owner-scoped regular conversation before its first
+ * message so the existing V4.2 resolver can enforce the initial KB selection.
+ * requestKey is generated once per new-chat picker; retries are idempotent.
+ * No Agent chats or temporary conversations can use this endpoint.
+ */
+router.post('/chat/prepare', async (req, res) => {
+  const scope = requestScope(req, res);
+  if (!scope) return;
+  const { requestKey, endpoint, model, libraries: input } = req.body ?? {};
+  if (typeof requestKey !== 'string' ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestKey)) {
+    return res.status(400).json({ error: 'Invalid first-chat idempotency key.' });
+  }
+  if (typeof endpoint !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(endpoint) ||
+      endpoint === 'agents' || endpoint === 'assistants' || endpoint === 'azureAssistants' ||
+      typeof model !== 'string' || !model.trim() || model.length > 150) {
+    return res.status(400).json({ error: 'Choose a regular chat model before preparing KBs.' });
+  }
+  if (!Array.isArray(input) || input.length > MAX_CHAT_LIBRARIES) {
+    return res.status(400).json({ error: 'Provide up to 50 KB selections.' });
+  }
+  const libraries = [];
+  const unique = new Set();
+  for (const item of input) {
+    if (!item || !validId(item.kb_id) || unique.has(item.kb_id)) {
+      return res.status(400).json({ error: 'Invalid or duplicate KB selection.' });
+    }
+    const tags = normalizeTags(item.tags ?? []);
+    if (tags === null) return res.status(400).json({ error: 'Invalid KB tags.' });
+    unique.add(item.kb_id);
+    libraries.push({ kb_id: item.kb_id, tags });
+  }
+  // Bind the client retry key to the authenticated owner and tenant; callers
+  // cannot choose an arbitrary conversationId or take over another user's ID.
+  const digest = crypto.createHash('sha256')
+    .update(JSON.stringify(['mine-kb-v43', scope.owner, scope.tenantId, requestKey]))
+    .digest('hex');
+  const conversationId = [
+    digest.slice(0, 8),
+    digest.slice(8, 12),
+    '5' + digest.slice(13, 16),
+    'a' + digest.slice(17, 20),
+    digest.slice(20, 32),
+  ].join('-');
+
+  try {
+    if (unique.size > 0) {
+      const allowed = await KnowledgeBase.find({
+        ...scope, _id: { $in: [...unique] },
+      }).select('_id').lean();
+      const allowedIds = new Set(allowed.map((kb) => String(kb._id)));
+      if (allowedIds.size !== unique.size || [...unique].some((id) => !allowedIds.has(id))) {
+        return res.status(403).json({ error: 'KB selection exceeds owned libraries.' });
+      }
+    }
+    // Never update an already-prepared chat's endpoint or model on retry.
+    const convo = await Conversation.findOneAndUpdate(
+      { user: scope.owner, tenantId: scope.tenantId, conversationId },
+      { $setOnInsert: {
+        user: scope.owner, tenantId: scope.tenantId, conversationId,
+        endpoint, model: model.trim(), title: 'New Chat', isTemporary: false,
+      } },
+      { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true },
+    );
+    if (!convo || convo.isTemporary || isAgentKnowledgeConversation(convo) ||
+        convo.endpoint !== endpoint || convo.model !== model.trim()) {
+      return res.status(409).json({ error: 'First-chat preparation conflict.' });
+    }
+    const record = await ChatKnowledgeSelection.findOneAndUpdate(
+      { ...scope, conversationId, agentId: REGULAR_CHAT_SCOPE },
+      { $setOnInsert: { libraries } },
+      { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true },
+    );
+    // Same requestKey cannot silently replace a previously approved KB set.
+    const selected = (record?.libraries ?? []).map((entry) => ({
+      kb_id: String(entry.kb_id), tags: [...(entry.tags ?? [])],
+    }));
+    if (JSON.stringify(selected) !== JSON.stringify(libraries)) {
+      return res.status(409).json({ error: 'First-chat KB selection conflict.' });
+    }
+    return res.status(201).json({
+      conversationId,
+      endpoint: convo.endpoint,
+      model: convo.model,
+      selected,
+    });
+  } catch (error) {
+    return failed(res, error);
+  }
+});
 
 router.get('/chat/:conversationId', async (req, res) => {
   const scope = requestScope(req, res);

@@ -431,6 +431,8 @@ function Bar({
         </span>
         {(kbAgentId || showTools) && (
           <ChatKnowledgePicker
+            index={index}
+            conversation={conversation}
             conversationId={conversationId}
             agentId={kbAgentId}
             disabled={disabled || isSubmitting}
