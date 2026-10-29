@@ -136,3 +136,30 @@ Files added/changed:
 This change is frontend-only and requires local Mac Jest (client) and
 typecheck before being called tested. Do not rerun backend V4.3 deploy simply
 for this frontend change; the running API remains unchanged.
+
+
+## Prepared Chat File Search toggle handoff (2026-10-29)
+
+Safari end-to-end validation confirmed the saved-empty conversation spinner was
+resolved and selected KB 1 persisted into the first message. However the
+**File Search tool chip disappeared** after Prepare, so Groq had no File
+Search tool to call; its "cannot access Knowledge Base" response was not
+evidence of missing KB records or missing vectors.
+
+The reason is that ephemeral tool state lives in
+`ephemeralAgentByConvoId(conversationId)`. Transitioning from the New Chat
+sentinel ID to a real prepared conversation ID doesn't automatically copy
+those settings. V4.3 now invokes the existing tested
+`useApplyNewAgentTemplate()` before `navigateToConvo()`, transferring
+the current New Chat File Search/Web Search/code/etc toggles into the
+prepared conversation's Recoil state. The BadgeRowProvider will persist the
+result under the prepared chat ID when the composer mounts.
+
+The patch copies the ACTUAL user's toggles and never auto-enables File
+Search just because KB 1 is selected. Tests verify both ON and OFF
+handoffs. No backend, DB, embedding, or Agent ACL change is necessary.
+
+Developer Mac tests and first-message File Search with citation are still
+required before treating the fix as verified. Previously prepared chats may
+need File Search explicitly re-enabled using the + tools palette once;
+the handoff occurs during NEW Prepare actions.
