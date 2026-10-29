@@ -5,6 +5,7 @@ import { ChevronDown, Database } from 'lucide-react';
 import { Constants, apiBaseUrl, request } from 'librechat-data-provider';
 import type { TConversation } from 'librechat-data-provider';
 import { useAuthContext } from '~/hooks';
+import { useApplyNewAgentTemplate } from '~/store';
 import { useChatFormContext } from '~/Providers';
 import useNavigateToConvo from '~/hooks/Conversations/useNavigateToConvo';
 
@@ -57,6 +58,7 @@ export default function ChatKnowledgePicker({
   const queryClient = useQueryClient();
   const form = useChatFormContext();
   const { navigateToConvo } = useNavigateToConvo(index);
+  const applyNewAgentTemplate = useApplyNewAgentTemplate();
   const principal = user?.id ?? '';
   const isNew = conversationId === 'new' || conversationId === Constants.NEW_CONVO;
   const prepareNew = isNew && !agentId;
@@ -168,6 +170,11 @@ export default function ChatKnowledgePicker({
           selected: libraries,
           inherited: false,
         });
+        // File Search, Web Search and other ephemeral tool toggles belong to
+        // the conversation ID, not the KB selection. Copy the active New Chat
+        // tool state to the prepared ID before navigation mounts its composer.
+        // Otherwise KB 1 survives but File Search silently turns off.
+        await applyNewAgentTemplate(prepared.conversationId, conversationId);
         setOpen(false);
         navigateToConvo({
           ...conversation,
