@@ -5,9 +5,10 @@ import { ChevronDown, Database } from 'lucide-react';
 import { Constants, apiBaseUrl, request } from 'librechat-data-provider';
 import type { TConversation } from 'librechat-data-provider';
 import { useAuthContext } from '~/hooks';
-import { useApplyNewAgentTemplate } from '~/store';
+import { useApplyNewAgentTemplate, useGetEphemeralAgent } from '~/store';
 import { useChatFormContext } from '~/Providers';
 import useNavigateToConvo from '~/hooks/Conversations/useNavigateToConvo';
+import { persistPreparedChatTools } from './persistPreparedChatTools';
 
 type AvailableLibrary = {
   kb_id: string;
@@ -59,6 +60,7 @@ export default function ChatKnowledgePicker({
   const form = useChatFormContext();
   const { navigateToConvo } = useNavigateToConvo(index);
   const applyNewAgentTemplate = useApplyNewAgentTemplate();
+  const getEphemeralAgent = useGetEphemeralAgent();
   const principal = user?.id ?? '';
   const isNew = conversationId === 'new' || conversationId === Constants.NEW_CONVO;
   const prepareNew = isNew && !agentId;
@@ -170,11 +172,12 @@ export default function ChatKnowledgePicker({
           selected: libraries,
           inherited: false,
         });
-        // File Search, Web Search and other ephemeral tool toggles belong to
-        // the conversation ID, not the KB selection. Copy the active New Chat
-        // tool state to the prepared ID before navigation mounts its composer.
-        // Otherwise KB 1 survives but File Search silently turns off.
-        await applyNewAgentTemplate(prepared.conversationId, conversationId);
+        // Copy tool choices both in memory AND into per-conversation storage
+        // before navigating; otherwise File Search may turn off on refresh.
+        // A selected KB alone must not auto-enable any tool.
+        const sourceAgent = getEphemeralAgent(conversationId);
+        await applyNewAgentTemplate(prepared.conversationId, conversationId, sourceAgent);
+        persistPreparedChatTools(prepared.conversationId, sourceAgent);
         setOpen(false);
         navigateToConvo({
           ...conversation,
