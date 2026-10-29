@@ -163,3 +163,33 @@ Developer Mac tests and first-message File Search with citation are still
 required before treating the fix as verified. Previously prepared chats may
 need File Search explicitly re-enabled using the + tools palette once;
 the handoff occurs during NEW Prepare actions.
+ 
+
+## Prepared-chat tools survive browser refresh (2026-10-29)
+
+Even when the V4.3 Prepare action copied ephemeral File Search state via
+`useApplyNewAgentTemplate`, that state lived in Recoil only. On a reload
+`BadgeRowProvider` restores tool toggles using timestamped localStorage
+keys suffixed with the **saved conversation ID**, not the New Chat key.
+This mismatch could hide File Search after navigation or browser refresh,
+while the owner-approved KB selection itself remained in MongoDB.
+
+The New Chat Prepare path now reads the user's actual source ephemeral
+tool state immediately after the server confirms the saved conversation,
+copies it into the prepared conversation's in-memory state, AND writes
+explicit toggles (including OFF) to the prepared ID's timestamped
+localStorage keys before navigation. It retains the UI-selected MCP
+server names only, not credentials. Selecting a KB cannot implicitly
+turn File Search on. Existing saved chats are unaffected.
+
+New frontend files:
+- `client/src/components/Chat/Input/persistPreparedChatTools.ts`
+- `client/src/components/Chat/Input/persistPreparedChatTools.test.ts`
+
+Requires Mac validation:
+`cd ~/mine-ai/client && npx jest --runInBand --coverage=false --watch=false src/components/Chat/Input/persistPreparedChatTools.test.ts && npm run typecheck`.
+
+Acceptance requires a **brand-new prepared conversation** with File
+Search ON and KB 1, first prompt correctly cited, browser reload retaining
+both choices, and New Chat KB0 staying isolated. Older prepared chats
+may require the File Search toggle to be manually switched on once.
