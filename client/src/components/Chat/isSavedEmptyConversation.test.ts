@@ -20,6 +20,7 @@ describe('MINE KB V4.3 saved conversation without first message', () => {
 
   it('never treats a previous active conversation as the new route', () => {
     expect(isSavedEmptyConversation({ ...savedEmpty, activeConversationId: 'other-chat' })).toBe(false);
+    expect(isSavedEmptyConversation({ ...savedEmpty, activeConversationId: null })).toBe(false);
     expect(isSavedEmptyConversation({ ...savedEmpty, routePending: true })).toBe(false);
   });
 
