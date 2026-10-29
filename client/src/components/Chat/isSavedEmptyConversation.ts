@@ -15,7 +15,7 @@ export function isSavedEmptyConversation({
   routePending,
 }: {
   conversationId?: string;
-  activeConversationId?: string;
+  activeConversationId?: string | null;
   messages: readonly unknown[] | null;
   isLoading: boolean;
   routePending: boolean;
