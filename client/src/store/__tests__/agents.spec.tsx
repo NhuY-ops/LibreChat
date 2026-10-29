@@ -22,6 +22,52 @@ const useAgentTemplateHarness = (conversationId: string) => {
   return { applyTemplate, ephemeralAgent };
 };
 
+describe('MINE KB V4.3 prepare tool-state handoff', () => {
+  it('preserves File Search and other New Chat toggles in the prepared conversation', async () => {
+    const sourceId = 'new';
+    const preparedId = 'prepared-chat-123';
+    const source = { file_search: true, web_search: false, execute_code: true };
+    const PreparedWrapper = ({ children }: { children: React.ReactNode }) => (
+      <RecoilRoot initializeState={({ set }) => {
+        set(ephemeralAgentByConvoId(sourceId), source);
+      }}>
+        {children}
+      </RecoilRoot>
+    );
+    const { result } = renderHook(() => useAgentTemplateHarness(preparedId), {
+      wrapper: PreparedWrapper,
+    });
+    await act(async () => {
+      await result.current.applyTemplate(preparedId, sourceId);
+    });
+    await waitFor(() => {
+      expect(result.current.ephemeralAgent).toEqual(source);
+      expect(result.current.ephemeralAgent?.file_search).toBe(true);
+    });
+  });
+
+  it('does not enable File Search when it was disabled in New Chat', async () => {
+    const sourceId = 'new';
+    const preparedId = 'prepared-chat-off';
+    const PreparedWrapper = ({ children }: { children: React.ReactNode }) => (
+      <RecoilRoot initializeState={({ set }) => {
+        set(ephemeralAgentByConvoId(sourceId), { file_search: false });
+      }}>
+        {children}
+      </RecoilRoot>
+    );
+    const { result } = renderHook(() => useAgentTemplateHarness(preparedId), {
+      wrapper: PreparedWrapper,
+    });
+    await act(async () => {
+      await result.current.applyTemplate(preparedId, sourceId);
+    });
+    await waitFor(() => {
+      expect(result.current.ephemeralAgent?.file_search).toBe(false);
+    });
+  });
+});
+
 describe('useApplyNewAgentTemplate', () => {
   it('applies an explicit ephemeral agent when optimistic hydration makes source and target match', async () => {
     const conversationId = 'convo-123';
